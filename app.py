@@ -123,37 +123,48 @@ def main():
     if page == "🏠 首頁概覽":
         show_homepage()
     elif page == "📊 整體效能儀表板":
-        from pages.performance_dashboard import show_performance_dashboard
+        import importlib
+        show_performance_dashboard = importlib.import_module('pages.1_📊_整體效能儀表板').show_performance_dashboard
         show_performance_dashboard()
     elif page == "🎯 活動分析":
-        from pages.campaign_analysis import show_campaign_analysis
+        import importlib
+        show_campaign_analysis = importlib.import_module('pages.2_🎯_活動分析').show_campaign_analysis
         show_campaign_analysis()
     elif page == "👥 受眾洞察":
-        from pages.audience_insights import show_audience_insights
+        import importlib
+        show_audience_insights = importlib.import_module('pages.3_👥_受眾洞察').show_audience_insights
         show_audience_insights()
     elif page == "💰 ROI 分析":
-        from pages.roi_analysis import show_roi_analysis
+        import importlib
+        show_roi_analysis = importlib.import_module('pages.4_💰_ROI分析').show_roi_analysis
         show_roi_analysis()
     elif page == "📈 趨勢分析":
-        from pages.trend_analysis import show_trend_analysis
+        import importlib
+        show_trend_analysis = importlib.import_module('pages.5_📈_趨勢分析').show_trend_analysis
         show_trend_analysis()
     elif page == "⚡ 即時優化建議":
-        from pages.optimization_recommendations import show_optimization_recommendations
+        import importlib
+        show_optimization_recommendations = importlib.import_module('pages.6_⚡_即時優化建議').show_optimization_recommendations
         show_optimization_recommendations()
     elif page == "🤖 AI 素材製作首頁":
-        from pages.ai_creative_hub import show_ai_creative_hub
+        import importlib
+        show_ai_creative_hub = importlib.import_module('pages.7_🤖_AI素材製作首頁').show_ai_creative_hub
         show_ai_creative_hub()
     elif page == "✍️ AI 文案生成":
-        from pages.ai_copywriting import main as show_ai_copywriting
+        import importlib
+        show_ai_copywriting = importlib.import_module('pages.8_✍️_AI文案生成').main
         show_ai_copywriting()
     elif page == "🎨 AI 圖片生成":
-        from pages.ai_image_generation import main as show_ai_image_generation
+        import importlib
+        show_ai_image_generation = importlib.import_module('pages.9_🎨_AI圖片生成').main
         show_ai_image_generation()
     elif page == "🧠 智能素材優化":
-        from pages.smart_creative_optimization import main as show_smart_creative_optimization
+        import importlib
+        show_smart_creative_optimization = importlib.import_module('pages.10_🧠_智能素材優化').main
         show_smart_creative_optimization()
     elif page == "📋 詳細數據表格":
-        from pages.detailed_data_table import main as show_detailed_data_table
+        import importlib
+        show_detailed_data_table = importlib.import_module('pages.11_📋_詳細數據表格').main
         show_detailed_data_table()
 
 @st.cache_data
