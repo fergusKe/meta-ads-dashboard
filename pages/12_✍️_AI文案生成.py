@@ -1,6 +1,6 @@
 import streamlit as st
 import pandas as pd
-import openai
+from openai import OpenAI
 import os
 from datetime import datetime
 import json
@@ -11,11 +11,11 @@ st.set_page_config(page_title="AI 文案生成", page_icon="✍️", layout="wid
 def load_openai_client():
     """載入 OpenAI 客戶端"""
     try:
-        openai.api_key = os.getenv('OPENAI_API_KEY')
-        if not openai.api_key:
+        api_key = os.getenv('OPENAI_API_KEY')
+        if not api_key:
             st.error("❌ 請在 .env 檔案中設定 OPENAI_API_KEY")
             return None
-        return openai
+        return OpenAI(api_key=api_key)
     except Exception as e:
         st.error(f"❌ OpenAI 初始化失敗：{str(e)}")
         return None
@@ -148,7 +148,14 @@ def generate_copywriting_prompt(copy_type, brand_info, performance_data, user_re
 def call_openai_api(prompt):
     """呼叫 OpenAI API"""
     try:
-        response = openai.ChatCompletion.create(
+        api_key = os.getenv('OPENAI_API_KEY')
+        if not api_key:
+            st.error("❌ 請在 .env 檔案中設定 OPENAI_API_KEY")
+            return None
+
+        client = OpenAI(api_key=api_key)
+
+        response = client.chat.completions.create(
             model="gpt-3.5-turbo",  # 使用可用的模型
             messages=[
                 {"role": "system", "content": "你是一位專業的廣告文案撰寫師，專精於Meta廣告文案創作。"},
@@ -312,11 +319,36 @@ def main():
         height=100
     )
 
-    # 目標
-    target_audience = st.sidebar.selectbox(
-        "主要目標",
-        ["茶飲愛好者", "健康養生族群", "上班族", "年輕消費者", "高端消費者", "自定義"]
-    )
+    # 檢查是否有來自智能投放策略的建議受眾
+    recommended_audience = st.session_state.get('target_audience', '')
+    recommended_objective = st.session_state.get('campaign_objective', '')
+    auto_generate_flag = st.session_state.get('auto_generate_copy', False)
+
+    # 調試信息
+    if recommended_audience or recommended_objective or auto_generate_flag:
+        st.sidebar.info("🔍 調試信息：")
+        st.sidebar.text(f"推薦受眾: {recommended_audience}")
+        st.sidebar.text(f"推薦目標: {recommended_objective}")
+        st.sidebar.text(f"自動生成: {auto_generate_flag}")
+
+    if recommended_audience:
+        st.sidebar.success(f"🎯 智能推薦受眾：{recommended_audience}")
+        if recommended_objective:
+            st.sidebar.success(f"🎯 推薦投放目標：{recommended_objective}")
+
+        use_recommended = st.sidebar.checkbox("使用智能推薦", value=True)
+        if use_recommended:
+            target_audience = recommended_audience
+        else:
+            target_audience = st.sidebar.selectbox(
+                "主要目標",
+                ["茶飲愛好者", "健康養生族群", "上班族", "年輕消費者", "高端消費者", "自定義"]
+            )
+    else:
+        target_audience = st.sidebar.selectbox(
+            "主要目標",
+            ["茶飲愛好者", "健康養生族群", "上班族", "年輕消費者", "高端消費者", "自定義"]
+        )
 
     if target_audience == "自定義":
         custom_audience = st.sidebar.text_input("請描述目標")
@@ -392,8 +424,21 @@ def main():
 
         st.text_area("需求摘要", value=user_requirements, height=150, disabled=True)
 
-        # 生成按鈕
-        if st.button("🚀 開始生成文案", type="primary", use_container_width=True):
+        # 檢查是否需要自動生成（來自智能投放策略的推薦）
+        auto_generate = (recommended_audience and
+                        st.session_state.get('auto_generate_copy', False))
+
+        # 如果是自動生成，清除標記
+        if auto_generate:
+            st.session_state['auto_generate_copy'] = False
+
+        # 生成按鈕或自動生成
+        manual_generate = st.button("🚀 開始生成文案", type="primary", use_container_width=True)
+
+        if manual_generate or auto_generate:
+            if auto_generate:
+                st.info("🎯 正在基於智能推薦的受眾組合生成文案...")
+
             with st.spinner("AI 正在創作中..."):
                 # 準備品牌資訊
                 brand_info = {"特色": brand_features}
@@ -414,7 +459,10 @@ def main():
                     save_copywriting_history(copy_type, user_requirements, results)
 
                     # 顯示結果
-                    st.success("✅ 文案生成完成！")
+                    if auto_generate:
+                        st.success("✅ 基於智能推薦的文案生成完成！")
+                    else:
+                        st.success("✅ 文案生成完成！")
                     display_copywriting_results(results, copy_type)
                 else:
                     st.error("❌ 文案生成失敗，請稍後再試")

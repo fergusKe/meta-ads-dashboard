@@ -1,642 +1,480 @@
 import streamlit as st
 import pandas as pd
-from datetime import datetime, timedelta
-import plotly.express as px
 import plotly.graph_objects as go
+import plotly.express as px
 from plotly.subplots import make_subplots
-from utils.data_loader import load_meta_ads_data, filter_data_by_date_range
 import numpy as np
+import sys
+from pathlib import Path
+
+# 添加父目錄到路徑
+sys.path.insert(0, str(Path(__file__).parent.parent))
+
+from utils.data_loader import load_meta_ads_data, calculate_summary_metrics
 
 def show_roi_analysis():
-    """顯示 ROI 分析頁面"""
-    st.markdown("# 💰 ROI 投資報酬率分析")
-    st.markdown("深入分析廣告投資報酬率，識別高價值活動與優化機會")
+    """顯示 ROI 分析頁面 - 升級版"""
+    st.markdown("# 💰 ROI 分析")
+    st.markdown("完整轉換路徑成本分析，優化投資報酬率")
 
     # 載入數據
     df = load_meta_ads_data()
-    if df is None:
+    if df is None or df.empty:
         st.error("無法載入數據，請檢查數據檔案。")
         return
 
-    # 時間範圍選擇器
-    st.markdown("## 📅 時間範圍設定")
+    metrics = calculate_summary_metrics(df)
 
-    col1, col2, col3 = st.columns([2, 2, 2])
+    # ========== 第一部分：ROI 總覽 ==========
+    st.markdown("## 📊 ROI 總覽")
 
-    with col1:
-        # 優先使用分析報告日期範圍
-        if '分析報告開始' in df.columns and '分析報告結束' in df.columns:
-            report_start_dates = df['分析報告開始'].dropna()
-            report_end_dates = df['分析報告結束'].dropna()
+    roi_col1, roi_col2, roi_col3, roi_col4 = st.columns(4)
 
-            if not report_start_dates.empty and not report_end_dates.empty:
-                data_min_date = report_start_dates.min().date()
-                data_max_date = report_end_dates.max().date()
-                default_start = data_min_date
-                default_end = data_max_date
-                date_source = "分析報告"
-            else:
-                # 備用：使用開始日期
-                if '開始' in df.columns and not df['開始'].isna().all():
-                    valid_dates = df['開始'].dropna()
-                    if not valid_dates.empty:
-                        data_min_date = valid_dates.min().date()
-                        data_max_date = valid_dates.max().date()
-                        default_start = data_min_date
-                        default_end = data_max_date
-                        date_source = "廣告開始"
-                    else:
-                        data_min_date = datetime.now().date() - timedelta(days=30)
-                        data_max_date = datetime.now().date()
-                        default_start = data_min_date
-                        default_end = data_max_date
-                        date_source = "預設"
-                else:
-                    data_min_date = datetime.now().date() - timedelta(days=30)
-                    data_max_date = datetime.now().date()
-                    default_start = data_min_date
-                    default_end = data_max_date
-                    date_source = "預設"
-        else:
-            # 備用：使用開始日期
-            if '開始' in df.columns and not df['開始'].isna().all():
-                valid_dates = df['開始'].dropna()
-                if not valid_dates.empty:
-                    data_min_date = valid_dates.min().date()
-                    data_max_date = valid_dates.max().date()
-                    default_start = data_min_date
-                    default_end = data_max_date
-                    date_source = "廣告開始"
-                else:
-                    data_min_date = datetime.now().date() - timedelta(days=30)
-                    data_max_date = datetime.now().date()
-                    default_start = data_min_date
-                    default_end = data_max_date
-                    date_source = "預設"
-            else:
-                data_min_date = datetime.now().date() - timedelta(days=30)
-                data_max_date = datetime.now().date()
-                default_start = data_min_date
-                default_end = data_max_date
-                date_source = "預設"
+    total_revenue = df['購買轉換值'].sum() if '購買轉換值' in df.columns else 0
+    total_spend = metrics['total_spend']
+    total_roi = ((total_revenue - total_spend) / total_spend * 100) if total_spend > 0 else 0
+    profit = total_revenue - total_spend
 
-        start_date = st.date_input(
-            "開始日期",
-            value=default_start,
-            min_value=data_min_date,
-            max_value=data_max_date,
-            help=f"實際數據範圍：{data_min_date} 至 {data_max_date} (來源：{date_source})"
+    with roi_col1:
+        st.metric(
+            "總投資",
+            f"${total_spend:,.0f}",
+            help="廣告總花費"
         )
 
-    with col2:
-        end_date = st.date_input(
-            "結束日期",
-            value=default_end,
-            min_value=data_min_date,
-            max_value=data_max_date,
-            help=f"實際數據範圍：{data_min_date} 至 {data_max_date} (來源：{date_source})"
+    with roi_col2:
+        st.metric(
+            "總營收",
+            f"${total_revenue:,.0f}",
+            help="購買轉換值總和"
         )
 
-    with col3:
-        # 快速選項
-        quick_options = st.selectbox(
-            "快速選擇",
-            ["自訂範圍", "最近 7 天", "最近 30 天", "最近 90 天", "全部時間"]
+    with roi_col3:
+        st.metric(
+            "ROI",
+            f"{total_roi:+.1f}%",
+            delta=f"{'獲利' if total_roi > 0 else '虧損'}",
+            help="投資報酬率"
         )
 
-        if quick_options != "自訂範圍":
-            if quick_options == "最近 7 天":
-                start_date = max(data_max_date - timedelta(days=7), data_min_date)
-                end_date = data_max_date
-            elif quick_options == "最近 30 天":
-                start_date = max(data_max_date - timedelta(days=30), data_min_date)
-                end_date = data_max_date
-            elif quick_options == "最近 90 天":
-                start_date = max(data_max_date - timedelta(days=90), data_min_date)
-                end_date = data_max_date
-            elif quick_options == "全部時間":
-                start_date = data_min_date
-                end_date = data_max_date
-
-    # 篩選數據
-    if start_date <= end_date:
-        filtered_df = filter_data_by_date_range(df, start_date, end_date)
-    else:
-        st.error("開始日期不能晚於結束日期！")
-        filtered_df = df
+    with roi_col4:
+        st.metric(
+            "淨利潤",
+            f"${profit:+,.0f}",
+            delta=f"{'賺' if profit > 0 else '賠'} ${abs(profit):,.0f}",
+            help="營收 - 花費"
+        )
 
     st.markdown("---")
 
-    # ROI 概覽儀表板
-    st.markdown("## 📊 ROI 概覽儀表板")
-
-    if not filtered_df.empty:
-        # 計算 ROI 指標
-        total_spend = filtered_df['花費金額 (TWD)'].sum()
-        # 計算總收益：ROAS × 花費金額
-        filtered_df_with_revenue = filtered_df[
-            (filtered_df['花費金額 (TWD)'] > 0) &
-            (~filtered_df['購買 ROAS（廣告投資報酬率）'].isna())
-        ].copy()
-        filtered_df_with_revenue['計算收益'] = (
-            filtered_df_with_revenue['購買 ROAS（廣告投資報酬率）'] *
-            filtered_df_with_revenue['花費金額 (TWD)']
-        )
-        total_revenue = filtered_df_with_revenue['計算收益'].sum()
-        total_purchases = filtered_df['購買次數'].sum()
-        avg_roas = filtered_df['購買 ROAS（廣告投資報酬率）'].mean()
-
-        # ROI 計算 (ROAS - 1) * 100
-        total_roi = ((total_revenue / total_spend) - 1) * 100 if total_spend > 0 else 0
-        avg_roi = (avg_roas - 1) * 100 if not np.isnan(avg_roas) else 0
-
-        # 盈虧平衡點
-        breakeven_campaigns = len(filtered_df[filtered_df['購買 ROAS（廣告投資報酬率）'] >= 1.0])
-        profitable_campaigns = len(filtered_df[filtered_df['購買 ROAS（廣告投資報酬率）'] >= 3.0])
-        total_campaigns = len(filtered_df)
-
-        col1, col2, col3, col4 = st.columns(4)
-
-        with col1:
-            st.metric(
-                "💰 總投資報酬率",
-                f"{total_roi:.1f}%",
-                delta=f"{'盈利' if total_roi > 0 else '虧損'}"
-            )
-
-        with col2:
-            st.metric(
-                "📈 平均 ROI",
-                f"{avg_roi:.1f}%",
-                delta=f"ROAS {avg_roas:.2f}" if not np.isnan(avg_roas) else "N/A"
-            )
-
-        with col3:
-            profitability_rate = (profitable_campaigns / total_campaigns * 100) if total_campaigns > 0 else 0
-            st.metric(
-                "🎯 獲利活動比例",
-                f"{profitability_rate:.1f}%",
-                delta=f"{profitable_campaigns}/{total_campaigns}"
-            )
-
-        with col4:
-            breakeven_rate = (breakeven_campaigns / total_campaigns * 100) if total_campaigns > 0 else 0
-            st.metric(
-                "⚖️ 盈虧平衡比例",
-                f"{breakeven_rate:.1f}%",
-                delta=f"{breakeven_campaigns}/{total_campaigns}"
-            )
-
-        st.markdown("---")
-
-        # ROI 分析圖表
-        tab1, tab2, tab3, tab4 = st.tabs(["📊 ROI 分佈", "💎 價值分析", "📈 趨勢分析", "🔍 深度洞察"])
-
-        with tab1:
-            st.markdown("### ROI 分佈分析")
-
-            col_dist1, col_dist2 = st.columns(2)
-
-            with col_dist1:
-                # ROI 分佈直方圖
-                roi_data = (filtered_df['購買 ROAS（廣告投資報酬率）'] - 1) * 100
-                roi_data = roi_data.dropna()
-
-                if not roi_data.empty:
-                    fig_hist = px.histogram(
-                        x=roi_data,
-                        nbins=20,
-                        title="ROI 分佈直方圖",
-                        labels={'x': 'ROI (%)', 'y': '活動數量'}
-                    )
-
-                    # 添加盈虧平衡線
-                    fig_hist.add_vline(
-                        x=0,
-                        line_dash="dash",
-                        line_color="red",
-                        annotation_text="盈虧平衡點"
-                    )
-
-                    # 添加目標線 (200% ROI)
-                    fig_hist.add_vline(
-                        x=200,
-                        line_dash="dash",
-                        line_color="green",
-                        annotation_text="目標 ROI: 200%"
-                    )
-
-                    st.plotly_chart(fig_hist, width='stretch')
-                else:
-                    st.info("暫無 ROI 數據可供分析")
-
-            with col_dist2:
-                # ROI 象限分析
-                roi_segments = {
-                    "🔴 虧損": len(filtered_df[filtered_df['購買 ROAS（廣告投資報酬率）'] < 1.0]),
-                    "🟡 微利": len(filtered_df[(filtered_df['購買 ROAS（廣告投資報酬率）'] >= 1.0) &
-                                           (filtered_df['購買 ROAS（廣告投資報酬率）'] < 2.0)]),
-                    "🟢 獲利": len(filtered_df[(filtered_df['購買 ROAS（廣告投資報酬率）'] >= 2.0) &
-                                           (filtered_df['購買 ROAS（廣告投資報酬率）'] < 3.0)]),
-                    "💎 高獲利": len(filtered_df[filtered_df['購買 ROAS（廣告投資報酬率）'] >= 3.0])
-                }
-
-                if sum(roi_segments.values()) > 0:
-                    fig_pie = px.pie(
-                        values=list(roi_segments.values()),
-                        names=list(roi_segments.keys()),
-                        title="ROI 象限分佈",
-                        color_discrete_sequence=['#ff4444', '#ffaa00', '#44ff44', '#00aa44']
-                    )
-                    st.plotly_chart(fig_pie, width='stretch')
-                else:
-                    st.info("暫無數據可供象限分析")
-
-        with tab2:
-            st.markdown("### 投資價值分析")
-
-            # 花費 vs ROI 散點圖
-            scatter_data = filtered_df[
-                (filtered_df['花費金額 (TWD)'] > 0) &
-                (~filtered_df['購買 ROAS（廣告投資報酬率）'].isna())
-            ].copy()
-
-            if not scatter_data.empty:
-                scatter_data['ROI (%)'] = (scatter_data['購買 ROAS（廣告投資報酬率）'] - 1) * 100
-
-                fig_scatter = px.scatter(
-                    scatter_data,
-                    x='花費金額 (TWD)',
-                    y='ROI (%)',
-                    size='購買次數',
-                    color='購買 ROAS（廣告投資報酬率）',
-                    hover_data=['行銷活動名稱'],
-                    title="花費 vs ROI 關係分析",
-                    labels={'花費金額 (TWD)': '花費金額 (TWD)', 'ROI (%)': 'ROI (%)'},
-                    color_continuous_scale='RdYlGn'
-                )
-
-                # 添加盈虧平衡線
-                fig_scatter.add_hline(
-                    y=0,
-                    line_dash="dash",
-                    line_color="red",
-                    annotation_text="盈虧平衡線"
-                )
-
-                st.plotly_chart(fig_scatter, width='stretch')
-
-                with st.expander("💡 價值分析解讀"):
-                    st.markdown("""
-                    **如何解讀這個圖表：**
-                    - **Y軸 (ROI)**：投資報酬率，0%以上為盈利
-                    - **X軸 (花費)**：投資金額
-                    - **氣泡大小**：購買次數
-                    - **顏色**：ROAS 值，綠色表現好
-
-                    **策略建議：**
-                    - **右上角**：高花費+高ROI，值得擴大投資
-                    - **左上角**：低花費+高ROI，可考慮增加預算
-                    - **右下角**：高花費+低ROI，需要優化或暫停
-                    """)
-            else:
-                st.info("暫無價值分析數據")
-
-        with tab3:
-            st.markdown("### ROI 時間趨勢分析")
-
-            trend_col1, trend_col2 = st.columns(2)
-
-            with trend_col1:
-                # ROI 趨勢圖
-                if '開始' in filtered_df.columns:
-                    trend_data = filtered_df.dropna(subset=['開始', '購買 ROAS（廣告投資報酬率）'])
-
-                    if not trend_data.empty:
-                        # 按日期計算 ROI
-                        daily_roi = trend_data.groupby(trend_data['開始'].dt.date).agg({
-                            '購買 ROAS（廣告投資報酬率）': 'mean',
-                            '花費金額 (TWD)': 'sum'
-                        }).reset_index()
-
-                        daily_roi['ROI (%)'] = (daily_roi['購買 ROAS（廣告投資報酬率）'] - 1) * 100
-
-                        # 過濾有效數據
-                        daily_roi = daily_roi[daily_roi['ROI (%)'].notna()]
-
-                        if not daily_roi.empty and len(daily_roi) > 1:
-                            fig_trend = px.line(
-                                daily_roi,
-                                x='開始',
-                                y='ROI (%)',
-                                title="ROI 時間趨勢",
-                                markers=True
-                            )
-
-                            # 添加盈虧平衡線
-                            fig_trend.add_hline(
-                                y=0,
-                                line_dash="dash",
-                                line_color="red",
-                                annotation_text="盈虧平衡"
-                            )
-
-                            # 設定 X 軸範圍
-                            fig_trend.update_layout(
-                                height=400,
-                                xaxis=dict(
-                                    range=[daily_roi['開始'].min(), daily_roi['開始'].max()]
-                                )
-                            )
-
-                            st.plotly_chart(fig_trend, width='stretch')
-                        else:
-                            st.info("暫無足夠的 ROI 趨勢數據")
-                    else:
-                        st.info("暫無有效的 ROI 趨勢數據")
-                else:
-                    st.info("缺少日期欄位，無法顯示趨勢")
-
-            with trend_col2:
-                # 累積 ROI 趨勢
-                if '開始' in filtered_df.columns:
-                    trend_data = filtered_df.dropna(subset=['開始', '花費金額 (TWD)', '購買 ROAS（廣告投資報酬率）'])
-
-                    if not trend_data.empty:
-                        # 計算每日收益
-                        trend_data_with_revenue = trend_data.copy()
-                        trend_data_with_revenue['計算收益'] = (
-                            trend_data_with_revenue['購買 ROAS（廣告投資報酬率）'] *
-                            trend_data_with_revenue['花費金額 (TWD)']
-                        )
-
-                        # 按日期排序並計算累積值
-                        daily_cumulative = trend_data_with_revenue.groupby(trend_data_with_revenue['開始'].dt.date).agg({
-                            '花費金額 (TWD)': 'sum',
-                            '計算收益': 'sum'
-                        }).reset_index().sort_values('開始')
-
-                        daily_cumulative['累積花費'] = daily_cumulative['花費金額 (TWD)'].cumsum()
-                        daily_cumulative['累積收益'] = daily_cumulative['計算收益'].cumsum()
-                        daily_cumulative['累積 ROI (%)'] = (
-                            (daily_cumulative['累積收益'] / daily_cumulative['累積花費'] - 1) * 100
-                        ).fillna(0)
-
-                        if not daily_cumulative.empty and len(daily_cumulative) > 1:
-                            fig_cumulative = px.line(
-                                daily_cumulative,
-                                x='開始',
-                                y='累積 ROI (%)',
-                                title="累積 ROI 趨勢",
-                                markers=True
-                            )
-
-                            # 添加盈虧平衡線
-                            fig_cumulative.add_hline(
-                                y=0,
-                                line_dash="dash",
-                                line_color="red",
-                                annotation_text="盈虧平衡"
-                            )
-
-                            # 設定 X 軸範圍
-                            fig_cumulative.update_layout(
-                                height=400,
-                                xaxis=dict(
-                                    range=[daily_cumulative['開始'].min(), daily_cumulative['開始'].max()]
-                                )
-                            )
-
-                            st.plotly_chart(fig_cumulative, width='stretch')
-                        else:
-                            st.info("暫無累積 ROI 數據")
-                    else:
-                        st.info("暫無有效的累積數據")
-                else:
-                    st.info("缺少日期欄位，無法顯示累積趨勢")
-
-        with tab4:
-            st.markdown("### 深度 ROI 洞察")
-
-            insight_col1, insight_col2 = st.columns(2)
-
-            with insight_col1:
-                st.markdown("#### 🏆 Top 10 最佳 ROI 活動")
-
-                # 計算活動 ROI
-                campaign_roi = filtered_df.groupby('行銷活動名稱').agg({
-                    '購買 ROAS（廣告投資報酬率）': 'mean',
-                    '花費金額 (TWD)': 'sum',
-                    '購買次數': 'sum'
-                }).reset_index()
-
-                campaign_roi['ROI (%)'] = (campaign_roi['購買 ROAS（廣告投資報酬率）'] - 1) * 100
-
-                # 排序並取前 10 名
-                top_campaigns = campaign_roi.nlargest(10, 'ROI (%)')
-
-                if not top_campaigns.empty:
-                    fig_top = px.bar(
-                        top_campaigns,
-                        x='ROI (%)',
-                        y='行銷活動名稱',
-                        orientation='h',
-                        title="Top 10 最佳 ROI 活動",
-                        color='ROI (%)',
-                        color_continuous_scale='RdYlGn'
-                    )
-
-                    fig_top.update_layout(
-                        height=500,
-                        yaxis={'categoryorder': 'total ascending'}
-                    )
-
-                    st.plotly_chart(fig_top, width='stretch')
-                else:
-                    st.info("暫無活動 ROI 數據")
-
-            with insight_col2:
-                st.markdown("#### 📊 ROI 效能矩陣")
-
-                # 創建效能矩陣數據
-                if not filtered_df.empty:
-                    matrix_data = filtered_df.groupby('行銷活動名稱').agg({
-                        '花費金額 (TWD)': 'sum',
-                        '購買 ROAS（廣告投資報酬率）': 'mean',
-                        '購買次數': 'sum'
-                    }).reset_index()
-
-                    matrix_data['ROI (%)'] = (matrix_data['購買 ROAS（廣告投資報酬率）'] - 1) * 100
-
-                    # 計算中位數作為分割點
-                    median_spend = matrix_data['花費金額 (TWD)'].median()
-                    median_roi = matrix_data['ROI (%)'].median()
-
-                    if not matrix_data.empty:
-                        fig_matrix = px.scatter(
-                            matrix_data,
-                            x='花費金額 (TWD)',
-                            y='ROI (%)',
-                            size='購買次數',
-                            hover_data=['行銷活動名稱'],
-                            title="ROI 效能矩陣",
-                            labels={'花費金額 (TWD)': '花費金額 (TWD)', 'ROI (%)': 'ROI (%)'}
-                        )
-
-                        # 添加象限分割線
-                        fig_matrix.add_vline(x=median_spend, line_dash="dash", line_color="gray")
-                        fig_matrix.add_hline(y=median_roi, line_dash="dash", line_color="gray")
-                        fig_matrix.add_hline(y=0, line_dash="solid", line_color="red")
-
-                        # 添加象限標籤
-                        fig_matrix.add_annotation(
-                            x=matrix_data['花費金額 (TWD)'].max() * 0.8,
-                            y=matrix_data['ROI (%)'].max() * 0.8,
-                            text="高花費高ROI<br>🌟明星活動",
-                            showarrow=False,
-                            bgcolor="lightgreen",
-                            bordercolor="green"
-                        )
-
-                        fig_matrix.add_annotation(
-                            x=matrix_data['花費金額 (TWD)'].max() * 0.2,
-                            y=matrix_data['ROI (%)'].max() * 0.8,
-                            text="低花費高ROI<br>💎潛力活動",
-                            showarrow=False,
-                            bgcolor="lightblue",
-                            bordercolor="blue"
-                        )
-
-                        st.plotly_chart(fig_matrix, width='stretch')
-                    else:
-                        st.info("暫無效能矩陣數據")
-
-        # ROI 優化建議
-        st.markdown("---")
-        st.markdown("## 🎯 ROI 優化建議")
-
-        col_rec1, col_rec2, col_rec3 = st.columns(3)
-
-        with col_rec1:
-            # 高 ROI 活動
-            high_roi_campaigns = filtered_df[filtered_df['購買 ROAS（廣告投資報酬率）'] >= 3.0]
-            if not high_roi_campaigns.empty:
-                top_performer = high_roi_campaigns.loc[
-                    high_roi_campaigns['購買 ROAS（廣告投資報酬率）'].idxmax()
-                ]
-
-                st.success(f"""
-                **🚀 擴大投資建議**
-
-                最佳表現活動：**{top_performer['行銷活動名稱']}**
-                - ROAS: {top_performer['購買 ROAS（廣告投資報酬率）']:.2f}
-                - ROI: {((top_performer['購買 ROAS（廣告投資報酬率）'] - 1) * 100):.1f}%
-                - 花費: ${top_performer['花費金額 (TWD)']:,.0f}
-
-                **建議動作：**
-                - 增加預算 20-50%
-                - 複製成功元素到其他活動
-                - 擴展相似受眾
-                """)
-            else:
-                st.info("暫無高 ROI 活動可供擴大投資")
-
-        with col_rec2:
-            # 需要優化的活動
-            poor_roi_campaigns = filtered_df[filtered_df['購買 ROAS（廣告投資報酬率）'] < 1.0]
-            if not poor_roi_campaigns.empty:
-                worst_performer = poor_roi_campaigns.loc[
-                    poor_roi_campaigns['購買 ROAS（廣告投資報酬率）'].idxmin()
-                ]
-
-                st.warning(f"""
-                **⚠️ 急需優化活動**
-
-                最需優化：**{worst_performer['行銷活動名稱']}**
-                - ROAS: {worst_performer['購買 ROAS（廣告投資報酬率）']:.2f}
-                - ROI: {((worst_performer['購買 ROAS（廣告投資報酬率）'] - 1) * 100):.1f}%
-                - 花費: ${worst_performer['花費金額 (TWD)']:,.0f}
-
-                **建議動作：**
-                - 暫停或大幅調整
-                - 重新設定目標受眾
-                - 更換創意素材
-                """)
-            else:
-                st.success("所有活動都達到盈虧平衡！")
-
-        with col_rec3:
-            # 整體策略建議
-            overall_roi = (avg_roas - 1) * 100 if not np.isnan(avg_roas) else 0
-
-            if overall_roi >= 200:
-                recommendation = "🎉 表現優異，考慮擴大整體預算"
-                color = "success"
-            elif overall_roi >= 100:
-                recommendation = "📈 表現良好，可優化低效活動"
-                color = "info"
-            elif overall_roi >= 0:
-                recommendation = "⚠️ 需要整體優化策略"
-                color = "warning"
-            else:
-                recommendation = "🚨 需要立即調整策略"
-                color = "error"
-
-            if color == "success":
-                st.success(f"""
-                **📊 整體 ROI 評估**
-
-                平均 ROI: **{overall_roi:.1f}%**
-
-                {recommendation}
-
-                **策略重點：**
-                - 識別成功模式
-                - 規模化優質活動
-                - 持續監控表現
-                """)
-            elif color == "info":
-                st.info(f"""
-                **📊 整體 ROI 評估**
-
-                平均 ROI: **{overall_roi:.1f}%**
-
-                {recommendation}
-
-                **策略重點：**
-                - 優化低效活動
-                - 重新分配預算
-                - A/B 測試新策略
-                """)
-            elif color == "warning":
-                st.warning(f"""
-                **📊 整體 ROI 評估**
-
-                平均 ROI: **{overall_roi:.1f}%**
-
-                {recommendation}
-
-                **策略重點：**
-                - 檢視目標設定
-                - 優化受眾精準度
-                - 改善轉換流程
-                """)
-            else:
-                st.error(f"""
-                **📊 整體 ROI 評估**
-
-                平均 ROI: **{overall_roi:.1f}%**
-
-                {recommendation}
-
-                **緊急行動：**
-                - 暫停虧損活動
-                - 重新評估策略
-                - 尋求專業建議
-                """)
-
+    # ========== 第二部分：完整轉換路徑成本分析 ==========
+    st.markdown("## 🎯 完整轉換路徑成本分析")
+
+    # 計算各階段成本
+    cost_data = {
+        '階段': [
+            '1. 曝光',
+            '2. 點擊',
+            '3. 頁面瀏覽',
+            '4. 內容瀏覽',
+            '5. 加入購物車',
+            '6. 開始結帳',
+            '7. 完成購買'
+        ],
+        '數量': [
+            metrics['total_impressions'],
+            metrics['total_clicks'],
+            metrics['total_page_views'],
+            metrics['total_content_views'],
+            metrics['total_add_to_cart'],
+            metrics['total_checkout'],
+            metrics['total_purchases']
+        ],
+        '階段成本': []
+    }
+
+    # 計算每階段的平均成本
+    cost_data['階段成本'] = [
+        (total_spend / metrics['total_impressions'] * 1000) if metrics['total_impressions'] > 0 else 0,  # CPM
+        (total_spend / metrics['total_clicks']) if metrics['total_clicks'] > 0 else 0,  # CPC
+        (total_spend / metrics['total_page_views']) if metrics['total_page_views'] > 0 else 0,  # 每次頁面瀏覽
+        (total_spend / metrics['total_content_views']) if metrics['total_content_views'] > 0 else 0,  # 每次內容瀏覽
+        (total_spend / metrics['total_add_to_cart']) if metrics['total_add_to_cart'] > 0 else 0,  # 每次加購
+        (total_spend / metrics['total_checkout']) if metrics['total_checkout'] > 0 else 0,  # 每次結帳
+        (total_spend / metrics['total_purchases']) if metrics['total_purchases'] > 0 else 0  # CPA
+    ]
+
+    # 計算累積成本效率（每階段轉換帶來的價值）
+    if metrics['total_purchases'] > 0:
+        revenue_per_purchase = total_revenue / metrics['total_purchases']
+        cost_data['轉換值'] = [
+            revenue_per_purchase * (metrics['total_purchases'] / metrics['total_impressions']) if metrics['total_impressions'] > 0 else 0,
+            revenue_per_purchase * (metrics['total_purchases'] / metrics['total_clicks']) if metrics['total_clicks'] > 0 else 0,
+            revenue_per_purchase * (metrics['total_purchases'] / metrics['total_page_views']) if metrics['total_page_views'] > 0 else 0,
+            revenue_per_purchase * (metrics['total_purchases'] / metrics['total_content_views']) if metrics['total_content_views'] > 0 else 0,
+            revenue_per_purchase * (metrics['total_purchases'] / metrics['total_add_to_cart']) if metrics['total_add_to_cart'] > 0 else 0,
+            revenue_per_purchase * (metrics['total_purchases'] / metrics['total_checkout']) if metrics['total_checkout'] > 0 else 0,
+            revenue_per_purchase
+        ]
     else:
-        st.info("所選時間範圍內暫無數據")
+        cost_data['轉換值'] = [0] * 7
+
+    cost_df = pd.DataFrame(cost_data)
+
+    cost_col1, cost_col2 = st.columns([3, 2])
+
+    with cost_col1:
+        # 成本階梯漏斗圖
+        fig_cost_funnel = go.Figure()
+
+        fig_cost_funnel.add_trace(go.Funnel(
+            y=cost_df['階段'],
+            x=cost_df['階段成本'],
+            textposition="inside",
+            textinfo="text",
+            text=[f"${c:.2f}" for c in cost_df['階段成本']],
+            marker=dict(color=['#e74c3c', '#e67e22', '#f39c12', '#f1c40f', '#2ecc71', '#27ae60', '#16a085'])
+        ))
+
+        fig_cost_funnel.update_layout(
+            title="轉換路徑各階段成本",
+            height=500
+        )
+
+        st.plotly_chart(fig_cost_funnel, use_container_width=True)
+
+    with cost_col2:
+        st.markdown("### 📊 階段成本明細")
+
+        # 顯示成本指標
+        st.metric("CPM（千次曝光）", f"${cost_df.loc[0, '階段成本']:.2f}")
+        st.metric("CPC（單次點擊）", f"${cost_df.loc[1, '階段成本']:.2f}")
+        st.metric("每次頁面瀏覽", f"${cost_df.loc[2, '階段成本']:.2f}")
+        st.metric("每次內容瀏覽", f"${cost_df.loc[3, '階段成本']:.2f}")
+        st.metric("每次加購", f"${cost_df.loc[4, '階段成本']:.2f}")
+        st.metric("每次結帳", f"${cost_df.loc[5, '階段成本']:.2f}")
+        st.metric("CPA（每次購買）", f"${cost_df.loc[6, '階段成本']:.2f}")
+
+    # 成本 vs 轉換值對比
+    st.markdown("### 💡 成本效益分析")
+
+    fig_cost_value = go.Figure()
+
+    fig_cost_value.add_trace(go.Bar(
+        name='階段成本',
+        x=cost_df['階段'],
+        y=cost_df['階段成本'],
+        marker_color='#e74c3c',
+        yaxis='y'
+    ))
+
+    fig_cost_value.add_trace(go.Scatter(
+        name='預期轉換值',
+        x=cost_df['階段'],
+        y=cost_df['轉換值'],
+        mode='lines+markers',
+        marker=dict(size=10, color='#2ecc71'),
+        line=dict(width=3),
+        yaxis='y2'
+    ))
+
+    fig_cost_value.update_layout(
+        title="各階段成本 vs 預期轉換值",
+        xaxis=dict(title="轉換階段", tickangle=-45),
+        yaxis=dict(title="階段成本 (TWD)", side='left'),
+        yaxis2=dict(title="預期轉換值 (TWD)", side='right', overlaying='y'),
+        hovermode='x unified',
+        height=450
+    )
+
+    st.plotly_chart(fig_cost_value, use_container_width=True)
+
+    # 詳細表格
+    st.dataframe(
+        cost_df.round(2),
+        use_container_width=True,
+        column_config={
+            "階段": "轉換階段",
+            "數量": st.column_config.NumberColumn("階段數量", format="%d"),
+            "階段成本": st.column_config.NumberColumn("階段成本 (TWD)", format="%.2f"),
+            "轉換值": st.column_config.NumberColumn("預期轉換值 (TWD)", format="%.2f")
+        },
+        hide_index=True
+    )
+
+    st.markdown("---")
+
+    # ========== 第三部分：ROAS 深度分析 ==========
+    st.markdown("## 📈 ROAS 深度分析")
+
+    roas_col1, roas_col2 = st.columns(2)
+
+    with roas_col1:
+        # ROAS 分布直方圖
+        roas_data = df[df['購買 ROAS（廣告投資報酬率）'] > 0]['購買 ROAS（廣告投資報酬率）']
+
+        fig_roas_dist = px.histogram(
+            roas_data,
+            x=roas_data,
+            nbins=30,
+            title="ROAS 分布",
+            labels={'x': 'ROAS', 'count': '次數'},
+            color_discrete_sequence=['#3498db']
+        )
+
+        # 添加平均線和中位數線
+        mean_roas = roas_data.mean()
+        median_roas = roas_data.median()
+
+        fig_roas_dist.add_vline(x=mean_roas, line_dash="dash", line_color="red", annotation_text=f"平均 {mean_roas:.2f}")
+        fig_roas_dist.add_vline(x=median_roas, line_dash="dash", line_color="green", annotation_text=f"中位數 {median_roas:.2f}")
+        fig_roas_dist.add_vline(x=1.0, line_dash="dot", line_color="orange", annotation_text="損益平衡點")
+
+        fig_roas_dist.update_layout(height=400)
+        st.plotly_chart(fig_roas_dist, use_container_width=True)
+
+    with roas_col2:
+        # ROAS 分類統計
+        roas_categories = pd.cut(
+            df['購買 ROAS（廣告投資報酬率）'],
+            bins=[-float('inf'), 0, 1, 3, 5, float('inf')],
+            labels=['虧損（<0）', '低效（0-1）', '及格（1-3）', '優秀（3-5）', '卓越（>5）']
+        )
+
+        roas_category_counts = roas_categories.value_counts().sort_index()
+
+        fig_roas_pie = go.Figure(data=[go.Pie(
+            labels=roas_category_counts.index,
+            values=roas_category_counts.values,
+            hole=0.4,
+            marker=dict(colors=['#e74c3c', '#e67e22', '#f39c12', '#2ecc71', '#16a085'])
+        )])
+
+        fig_roas_pie.update_layout(
+            title="ROAS 分類占比",
+            height=400
+        )
+
+        st.plotly_chart(fig_roas_pie, use_container_width=True)
+
+    # ROAS vs 花費散點圖
+    st.markdown("### 🎯 ROAS vs 花費散點圖")
+
+    campaign_roas_spend = df.groupby('行銷活動名稱').agg({
+        '花費金額 (TWD)': 'sum',
+        '購買 ROAS（廣告投資報酬率）': 'mean',
+        '購買次數': 'sum'
+    }).reset_index()
+
+    fig_roas_scatter = px.scatter(
+        campaign_roas_spend,
+        x='花費金額 (TWD)',
+        y='購買 ROAS（廣告投資報酬率）',
+        size='購買次數',
+        hover_data=['行銷活動名稱'],
+        title="花費 vs ROAS（識別最佳投資點）",
+        labels={'花費金額 (TWD)': '花費 (TWD)', '購買 ROAS（廣告投資報酬率）': 'ROAS'},
+        color='購買 ROAS（廣告投資報酬率）',
+        color_continuous_scale='RdYlGn'
+    )
+
+    # 添加分隔線
+    median_spend = campaign_roas_spend['花費金額 (TWD)'].median()
+    median_roas_campaign = campaign_roas_spend['購買 ROAS（廣告投資報酬率）'].median()
+
+    fig_roas_scatter.add_hline(y=median_roas_campaign, line_dash="dash", line_color="gray")
+    fig_roas_scatter.add_vline(x=median_spend, line_dash="dash", line_color="gray")
+
+    # 標註最佳投資區（高ROAS + 高花費）
+    fig_roas_scatter.add_annotation(
+        x=campaign_roas_spend['花費金額 (TWD)'].max() * 0.8,
+        y=campaign_roas_spend['購買 ROAS（廣告投資報酬率）'].max() * 0.9,
+        text="🌟 最佳投資區",
+        showarrow=False,
+        font=dict(size=14, color="green")
+    )
+
+    fig_roas_scatter.update_layout(height=500)
+    st.plotly_chart(fig_roas_scatter, use_container_width=True)
+
+    # 高 ROAS 活動特徵
+    st.markdown("### ⭐ 高 ROAS 活動特徵")
+
+    high_roas_campaigns = campaign_roas_spend[
+        campaign_roas_spend['購買 ROAS（廣告投資報酬率）'] > campaign_roas_spend['購買 ROAS（廣告投資報酬率）'].quantile(0.75)
+    ].sort_values('購買 ROAS（廣告投資報酬率）', ascending=False)
+
+    if not high_roas_campaigns.empty:
+        st.success(f"✅ 發現 {len(high_roas_campaigns)} 個高 ROAS 活動（前 25%）")
+
+        st.dataframe(
+            high_roas_campaigns,
+            use_container_width=True,
+            column_config={
+                "行銷活動名稱": "活動名稱",
+                "花費金額 (TWD)": st.column_config.NumberColumn("花費", format="%d"),
+                "購買 ROAS（廣告投資報酬率）": st.column_config.NumberColumn("ROAS", format="%.2f"),
+                "購買次數": st.column_config.NumberColumn("購買", format="%d")
+            },
+            hide_index=True
+        )
+
+        # 分析高 ROAS 活動的共同特徵
+        high_roas_data = df[df['行銷活動名稱'].isin(high_roas_campaigns['行銷活動名稱'])]
+
+        if '品質排名' in high_roas_data.columns:
+            quality_dist = high_roas_data['品質排名'].value_counts()
+            st.info(f"""
+            **🔍 高 ROAS 活動的共同特徵：**
+            - 品質排名：{quality_dist.idxmax()} 占多數
+            - 平均 CTR：{high_roas_data['CTR（全部）'].mean():.2f}%
+            - 平均轉換率：{(high_roas_data['購買次數'].sum() / high_roas_data['觸及人數'].sum() * 100):.2f}%
+            """)
+
+    st.markdown("---")
+
+    # ========== 第四部分：成本效益優化建議 ==========
+    st.markdown("## 💡 成本效益優化建議")
+
+    # 識別高成本低轉換的環節
+    st.markdown("### ⚠️ 高成本環節識別")
+
+    # 計算理想成本結構（基於行業標準）
+    ideal_costs = {
+        'CPM': 100,
+        'CPC': 10,
+        '每次頁面瀏覽': 15,
+        '每次加購': 50,
+        '每次結帳': 100,
+        'CPA': 300
+    }
+
+    actual_costs = {
+        'CPM': cost_df.loc[0, '階段成本'],
+        'CPC': cost_df.loc[1, '階段成本'],
+        '每次頁面瀏覽': cost_df.loc[2, '階段成本'],
+        '每次加購': cost_df.loc[4, '階段成本'],
+        '每次結帳': cost_df.loc[5, '階段成本'],
+        'CPA': cost_df.loc[6, '階段成本']
+    }
+
+    comparison_data = []
+    for key in ideal_costs.keys():
+        difference = actual_costs[key] - ideal_costs[key]
+        percentage_diff = (difference / ideal_costs[key] * 100) if ideal_costs[key] > 0 else 0
+
+        comparison_data.append({
+            '指標': key,
+            '理想成本': ideal_costs[key],
+            '實際成本': actual_costs[key],
+            '差異': difference,
+            '差異%': percentage_diff,
+            '狀態': '✅ 良好' if difference <= 0 else ('⚠️ 注意' if percentage_diff < 50 else '❌ 需優化')
+        })
+
+    comparison_df = pd.DataFrame(comparison_data)
+
+    st.dataframe(
+        comparison_df.round(2),
+        use_container_width=True,
+        column_config={
+            "指標": "成本指標",
+            "理想成本": st.column_config.NumberColumn("理想成本", format="%.2f"),
+            "實際成本": st.column_config.NumberColumn("實際成本", format="%.2f"),
+            "差異": st.column_config.NumberColumn("差異", format="%+.2f"),
+            "差異%": st.column_config.NumberColumn("差異%", format="%+.1f%%"),
+            "狀態": "狀態"
+        },
+        hide_index=True
+    )
+
+    # 具體優化方向
+    st.markdown("### 🎯 具體優化方向")
+
+    optimize_col1, optimize_col2 = st.columns(2)
+
+    with optimize_col1:
+        # 找出成本超標最嚴重的環節
+        worst_stage = comparison_df.loc[comparison_df['差異%'].idxmax()]
+
+        st.error(f"""
+        **⚠️ 最需優化環節：{worst_stage['指標']}**
+
+        - 實際成本：${worst_stage['實際成本']:.2f}
+        - 理想成本：${worst_stage['理想成本']:.2f}
+        - 超出：{worst_stage['差異%']:+.1f}%
+
+        **優化建議**：
+        """)
+
+        if 'CPC' in worst_stage['指標']:
+            st.markdown("""
+            - 優化廣告素材（提升 CTR）
+            - 精準定位受眾
+            - 測試不同出價策略
+            """)
+        elif 'CPA' in worst_stage['指標']:
+            st.markdown("""
+            - 優化 Landing Page
+            - 簡化購買流程
+            - 提供促銷優惠
+            - 重新定向未完成購買的用戶
+            """)
+        elif '加購' in worst_stage['指標']:
+            st.markdown("""
+            - 優化產品頁面
+            - 調整價格策略
+            - 增加產品評價
+            - 提供免運或折扣
+            """)
+
+    with optimize_col2:
+        # 預算重新分配建議
+        st.success("""
+        **💰 預算重新分配建議**
+
+        根據 ROAS 分析：
+        1. 增加高 ROAS 活動預算（+30%）
+        2. 降低低 ROAS 活動預算（-50%）
+        3. 暫停 ROAS < 1.0 的活動
+
+        **預期效果**：
+        - 整體 ROAS 提升 15-25%
+        - CPA 降低 10-15%
+        - ROI 增加 20-30%
+        """)
+
+    # ROI 瀑布圖
+    st.markdown("### 📊 ROI 組成瀑布圖")
+
+    # 計算各組成部分
+    waterfall_data = {
+        '項目': ['總營收', '廣告花費', '其他成本', '淨利潤'],
+        '金額': [total_revenue, -total_spend, 0, profit],
+        '類型': ['total', 'relative', 'relative', 'total']
+    }
+
+    fig_waterfall = go.Figure(go.Waterfall(
+        name="ROI",
+        orientation="v",
+        measure=waterfall_data['類型'],
+        x=waterfall_data['項目'],
+        y=waterfall_data['金額'],
+        text=[f"${abs(v):,.0f}" for v in waterfall_data['金額']],
+        textposition="outside",
+        connector={"line": {"color": "rgb(63, 63, 63)"}},
+        increasing={"marker": {"color": "#2ecc71"}},
+        decreasing={"marker": {"color": "#e74c3c"}},
+        totals={"marker": {"color": "#3498db"}}
+    ))
+
+    fig_waterfall.update_layout(
+        title="ROI 瀑布圖",
+        yaxis_title="金額 (TWD)",
+        height=450
+    )
+
+    st.plotly_chart(fig_waterfall, use_container_width=True)
 
 if __name__ == "__main__":
     show_roi_analysis()

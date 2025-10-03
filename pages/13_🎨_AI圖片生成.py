@@ -306,6 +306,16 @@ def main():
     col1, col2 = st.columns([2, 1])
 
     with col1:
+        # 檢查智能推薦受眾
+        recommended_audience = st.session_state.get('target_audience', '')
+        recommended_objective = st.session_state.get('campaign_objective', '')
+
+        if recommended_audience:
+            st.success(f"🎯 **智能推薦受眾**：{recommended_audience}")
+            if recommended_objective:
+                st.success(f"🎯 **推薦投放目標**：{recommended_objective}")
+            st.info("💡 圖片將針對此受眾群體進行優化設計")
+
         st.subheader("📊 品牌分析參考")
 
         if df is not None:
@@ -360,8 +370,21 @@ def main():
 
         st.text_area("需求摘要", value=requirements_summary, height=150, disabled=True)
 
-        # 生成按鈕
-        if st.button("🚀 開始生成圖片", type="primary", use_container_width=True):
+        # 檢查是否需要自動生成（來自智能投放策略的推薦）
+        auto_generate = (recommended_audience and
+                        st.session_state.get('auto_generate_image', False))
+
+        # 如果是自動生成，清除標記
+        if auto_generate:
+            st.session_state['auto_generate_image'] = False
+
+        # 生成按鈕或自動生成
+        manual_generate = st.button("🚀 開始生成圖片", type="primary", use_container_width=True)
+
+        if manual_generate or auto_generate:
+            if auto_generate:
+                st.info("🎯 正在基於智能推薦的受眾組合生成圖片...")
+
             with st.spinner("AI 正在創作中，請稍候..."):
                 # 生成提示詞
                 prompt = generate_image_prompt(
@@ -375,7 +398,10 @@ def main():
                 image_data = call_gemini_api(prompt, api_key)
 
                 if image_data:
-                    st.success("✅ 圖片生成完成！")
+                    if auto_generate:
+                        st.success("✅ 基於智能推薦的圖片生成完成！")
+                    else:
+                        st.success("✅ 圖片生成完成！")
 
                     # 儲存歷史
                     save_generation_history(

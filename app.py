@@ -90,13 +90,17 @@ def main():
             "🎯 活動分析",
             "👥 受眾洞察",
             "💰 ROI 分析",
+            "🎨 素材成效分析",  # NEW
+            "📈 廣告品質評分",  # NEW
+            "🔄 轉換漏斗優化",  # NEW
+            "📋 詳細數據表格",  # NEW (升級版)
             "📈 趨勢分析",
             "⚡ 即時優化建議",
             "🤖 AI 素材製作首頁",
             "✍️ AI 文案生成",
             "🎨 AI 圖片生成",
             "🧠 智能素材優化",
-            "📋 詳細數據表格"
+            "🎯 智能投放策略"
         ]
 
         # 如果有導航指令，設定對應的索引
@@ -138,34 +142,50 @@ def main():
         import importlib
         show_roi_analysis = importlib.import_module('pages.4_💰_ROI分析').show_roi_analysis
         show_roi_analysis()
+    elif page == "🎨 素材成效分析":
+        import importlib
+        show_creative_analysis = importlib.import_module('pages.5_🎨_素材成效分析').show_creative_analysis
+        show_creative_analysis()
+    elif page == "📈 廣告品質評分":
+        import importlib
+        show_quality_score_analysis = importlib.import_module('pages.6_📈_廣告品質評分').show_quality_score_analysis
+        show_quality_score_analysis()
+    elif page == "🔄 轉換漏斗優化":
+        import importlib
+        show_funnel_optimization = importlib.import_module('pages.7_🔄_轉換漏斗優化').show_funnel_optimization
+        show_funnel_optimization()
+    elif page == "📋 詳細數據表格":
+        import importlib
+        show_detailed_data_table = importlib.import_module('pages.8_📋_詳細數據表格').show_detailed_data_table
+        show_detailed_data_table()
     elif page == "📈 趨勢分析":
         import importlib
-        show_trend_analysis = importlib.import_module('pages.5_📈_趨勢分析').show_trend_analysis
+        show_trend_analysis = importlib.import_module('pages.09_📈_趨勢分析').show_trend_analysis
         show_trend_analysis()
     elif page == "⚡ 即時優化建議":
         import importlib
-        show_optimization_recommendations = importlib.import_module('pages.6_⚡_即時優化建議').show_optimization_recommendations
+        show_optimization_recommendations = importlib.import_module('pages.10_⚡_即時優化建議').show_optimization_recommendations
         show_optimization_recommendations()
     elif page == "🤖 AI 素材製作首頁":
         import importlib
-        show_ai_creative_hub = importlib.import_module('pages.7_🤖_AI素材製作首頁').show_ai_creative_hub
+        show_ai_creative_hub = importlib.import_module('pages.11_🤖_AI素材製作首頁').show_ai_creative_hub
         show_ai_creative_hub()
     elif page == "✍️ AI 文案生成":
         import importlib
-        show_ai_copywriting = importlib.import_module('pages.8_✍️_AI文案生成').main
+        show_ai_copywriting = importlib.import_module('pages.12_✍️_AI文案生成').main
         show_ai_copywriting()
     elif page == "🎨 AI 圖片生成":
         import importlib
-        show_ai_image_generation = importlib.import_module('pages.9_🎨_AI圖片生成').main
+        show_ai_image_generation = importlib.import_module('pages.13_🎨_AI圖片生成').main
         show_ai_image_generation()
     elif page == "🧠 智能素材優化":
         import importlib
-        show_smart_creative_optimization = importlib.import_module('pages.10_🧠_智能素材優化').main
+        show_smart_creative_optimization = importlib.import_module('pages.14_🧠_智能素材優化').main
         show_smart_creative_optimization()
-    elif page == "📋 詳細數據表格":
+    elif page == "🎯 智能投放策略":
         import importlib
-        show_detailed_data_table = importlib.import_module('pages.11_📋_詳細數據表格').main
-        show_detailed_data_table()
+        show_smart_strategy = importlib.import_module('pages.15_🎯_智能投放策略').main
+        show_smart_strategy()
 
 @st.cache_data
 def load_data():

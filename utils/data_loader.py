@@ -49,6 +49,11 @@ def preprocess_data(df):
         if col in df.columns:
             df[col] = pd.to_datetime(df[col], errors='coerce')
 
+    # 從月份欄位提取年月
+    if '月' in df.columns:
+        df['月份'] = pd.to_datetime(df['月'], errors='coerce')
+        df['年月'] = df['月份'].dt.to_period('M').astype(str)
+
     # 計算投放天數
     if '開始' in df.columns and '結束時間' in df.columns:
         df['投放天數'] = (df['結束時間'] - df['開始']).dt.days + 1
@@ -58,6 +63,18 @@ def preprocess_data(df):
     if '花費金額 (TWD)' in df.columns and '投放天數' in df.columns:
         df['日均花費'] = df['花費金額 (TWD)'] / df['投放天數']
 
+    # 處理預算欄位（轉為數值）
+    budget_columns = ['廣告組合預算', '行銷活動預算', '日預算']
+    for col in budget_columns:
+        if col in df.columns:
+            df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0)
+
+    # 計算轉換漏斗指標
+    df = calculate_funnel_metrics(df)
+
+    # 處理品質排名（轉為數值）
+    df = process_quality_rankings(df)
+
     # 填充數值型欄位的缺失值
     numeric_columns = df.select_dtypes(include=['number']).columns
     df[numeric_columns] = df[numeric_columns].fillna(0)
@@ -65,6 +82,89 @@ def preprocess_data(df):
     # 填充文字型欄位的缺失值
     text_columns = df.select_dtypes(include=['object']).columns
     df[text_columns] = df[text_columns].fillna('未知')
+
+    return df
+
+def calculate_funnel_metrics(df):
+    """
+    計算轉換漏斗各階段指標
+
+    Args:
+        df (pd.DataFrame): 數據框架
+
+    Returns:
+        pd.DataFrame: 新增漏斗指標的數據框架
+    """
+    # 點擊率
+    if '連結點擊次數' in df.columns and '曝光次數' in df.columns:
+        df['點擊率'] = (df['連結點擊次數'] / df['曝光次數'] * 100).replace([float('inf'), -float('inf')], 0)
+
+    # 頁面瀏覽率
+    if '連結頁面瀏覽次數' in df.columns and '連結點擊次數' in df.columns:
+        df['頁面瀏覽率'] = (df['連結頁面瀏覽次數'] / df['連結點擊次數'] * 100).replace([float('inf'), -float('inf')], 0)
+
+    # 內容瀏覽率
+    if '內容瀏覽次數' in df.columns and '連結頁面瀏覽次數' in df.columns:
+        df['內容瀏覽率'] = (df['內容瀏覽次數'] / df['連結頁面瀏覽次數'] * 100).replace([float('inf'), -float('inf')], 0)
+
+    # 加購率
+    if '加到購物車次數' in df.columns and '內容瀏覽次數' in df.columns:
+        df['加購率'] = (df['加到購物車次數'] / df['內容瀏覽次數'] * 100).replace([float('inf'), -float('inf')], 0)
+
+    # 結帳率
+    if '開始結帳次數' in df.columns and '加到購物車次數' in df.columns:
+        df['結帳率'] = (df['開始結帳次數'] / df['加到購物車次數'] * 100).replace([float('inf'), -float('inf')], 0)
+
+    # 購買完成率
+    if '購買次數' in df.columns and '開始結帳次數' in df.columns:
+        df['購買完成率'] = (df['購買次數'] / df['開始結帳次數'] * 100).replace([float('inf'), -float('inf')], 0)
+
+    # 整體轉換率（從觸及到購買）
+    if '購買次數' in df.columns and '觸及人數' in df.columns:
+        df['整體轉換率'] = (df['購買次數'] / df['觸及人數'] * 100).replace([float('inf'), -float('inf')], 0)
+
+    return df
+
+def process_quality_rankings(df):
+    """
+    處理品質排名欄位，轉換為數值分數
+
+    Args:
+        df (pd.DataFrame): 數據框架
+
+    Returns:
+        pd.DataFrame: 處理後的數據框架
+    """
+    ranking_map = {
+        '平均以上': 3,
+        'Above Average': 3,
+        '平均': 2,
+        'Average': 2,
+        '平均以下': 1,
+        'Below Average': 1,
+        '未知': 0,
+        '-': 0,  # 處理破折號
+        '': 0
+    }
+
+    ranking_columns = ['品質排名', '互動率排名', '轉換率排名']
+
+    for col in ranking_columns:
+        if col in df.columns:
+            # 先將 NaN 轉為字串，再處理破折號
+            df[col] = df[col].fillna('-')
+            # 創建數值版本
+            df[f'{col}_分數'] = df[col].map(ranking_map).fillna(0)
+            # 將破折號統一為「未知」以便圖表顯示
+            df[col] = df[col].replace('-', '未知')
+
+    # 計算綜合品質分數（轉換率權重最高）
+    if all(f'{col}_分數' in df.columns for col in ranking_columns):
+        df['綜合品質分數'] = (
+            df['品質排名_分數'] * 0.25 +
+            df['互動率排名_分數'] * 0.25 +
+            df['轉換率排名_分數'] * 0.5
+        )
 
     return df
 
@@ -81,16 +181,35 @@ def calculate_summary_metrics(df):
     if df is None or df.empty:
         return {}
 
+    # 基本成效指標
     metrics = {
         'total_spend': df['花費金額 (TWD)'].sum(),
-        'total_purchases': df['購買次數'].sum(),
         'total_reach': df['觸及人數'].sum(),
         'total_impressions': df['曝光次數'].sum(),
-        'avg_roas': df['購買 ROAS（廣告投資報酬率）'].mean(),
-        'avg_cpa': df['每次購買的成本'].mean(),
-        'avg_ctr': df['CTR（全部）'].mean(),
-        'avg_cpm': df['CPM（每千次廣告曝光成本）'].mean(),
-        'conversion_rate': (df['購買次數'].sum() / df['觸及人數'].sum() * 100) if df['觸及人數'].sum() > 0 else 0,
+        'total_clicks': df['連結點擊次數'].sum() if '連結點擊次數' in df.columns else 0,
+        'total_page_views': df['連結頁面瀏覽次數'].sum() if '連結頁面瀏覽次數' in df.columns else 0,
+        'total_content_views': df['內容瀏覽次數'].sum() if '內容瀏覽次數' in df.columns else 0,
+        'total_add_to_cart': df['加到購物車次數'].sum() if '加到購物車次數' in df.columns else 0,
+        'total_checkout': df['開始結帳次數'].sum() if '開始結帳次數' in df.columns else 0,
+        'total_purchases': df['購買次數'].sum() if '購買次數' in df.columns else 0,
+
+        # 平均指標
+        'avg_frequency': df['頻率'].mean() if '頻率' in df.columns else 0,
+        'avg_ctr': df['CTR（全部）'].mean() if 'CTR（全部）' in df.columns else 0,
+        'avg_cpm': df['CPM（每千次廣告曝光成本）'].mean() if 'CPM（每千次廣告曝光成本）' in df.columns else 0,
+        'avg_cpc': df['CPC（單次連結點擊成本）'].mean() if 'CPC（單次連結點擊成本）' in df.columns else 0,
+        'avg_cpa': df['每次購買的成本'].mean() if '每次購買的成本' in df.columns else 0,
+        'avg_roas': df['購買 ROAS（廣告投資報酬率）'].mean() if '購買 ROAS（廣告投資報酬率）' in df.columns else 0,
+
+        # 轉換率指標
+        'click_rate': (df['連結點擊次數'].sum() / df['曝光次數'].sum() * 100) if df['曝光次數'].sum() > 0 else 0,
+        'page_view_rate': (df['連結頁面瀏覽次數'].sum() / df['連結點擊次數'].sum() * 100) if df['連結點擊次數'].sum() > 0 and '連結頁面瀏覽次數' in df.columns else 0,
+        'add_to_cart_rate': (df['加到購物車次數'].sum() / df['內容瀏覽次數'].sum() * 100) if df['內容瀏覽次數'].sum() > 0 and '加到購物車次數' in df.columns else 0,
+        'checkout_rate': (df['開始結帳次數'].sum() / df['加到購物車次數'].sum() * 100) if df['加到購物車次數'].sum() > 0 and '開始結帳次數' in df.columns else 0,
+        'purchase_rate': (df['購買次數'].sum() / df['開始結帳次數'].sum() * 100) if df['開始結帳次數'].sum() > 0 and '購買次數' in df.columns else 0,
+        'overall_conversion_rate': (df['購買次數'].sum() / df['觸及人數'].sum() * 100) if df['觸及人數'].sum() > 0 and '購買次數' in df.columns else 0,
+
+        # 其他資訊
         'total_records': len(df),
         'date_range': {
             'start': df['開始'].min() if '開始' in df.columns and not df['開始'].isna().all() else None,
