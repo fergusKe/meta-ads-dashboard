@@ -157,8 +157,43 @@ def analyze_image_with_vision(image, client, brand_context=""):
         st.error(f"❌ 圖片分析失敗：{str(e)}")
         return None
 
+def generate_optimized_image_with_gemini(optimization_prompt, image_size="1024x1024"):
+    """使用 Gemini 生成優化後的圖片"""
+    api_key = os.getenv('GEMINI_API_KEY')
+    if not api_key:
+        return None, None
+
+    try:
+        from google import genai
+    except ImportError:
+        return None, None
+
+    try:
+        client = genai.Client(api_key=api_key)
+        model_name = os.getenv('GEMINI_IMAGE_MODEL', 'gemini-2.5-flash-image')
+
+        response = client.models.generate_content(
+            model=model_name,
+            contents=[optimization_prompt],
+        )
+
+        # 解析回應
+        if hasattr(response, 'candidates') and response.candidates:
+            for candidate in response.candidates:
+                if hasattr(candidate, 'content') and candidate.content:
+                    if hasattr(candidate.content, 'parts') and candidate.content.parts:
+                        for part in candidate.content.parts:
+                            if hasattr(part, 'inline_data') and part.inline_data:
+                                if hasattr(part.inline_data, 'data') and part.inline_data.data:
+                                    return part.inline_data.data, optimization_prompt
+
+        return None, None
+
+    except Exception:
+        return None, None
+
 def generate_optimized_image(original_analysis, client, image_size="1024x1024"):
-    """基於分析結果生成優化後的圖片"""
+    """基於分析結果生成優化後的圖片（優先使用 Gemini，失敗時使用 DALL-E 3）"""
     try:
         # 根據分析結果構建優化提示詞
         weaknesses = original_analysis.get('weaknesses', [])
@@ -189,11 +224,28 @@ def generate_optimized_image(original_analysis, client, image_size="1024x1024"):
 解析度：高清晰度，適合社群媒體使用
 """
 
+        # 優先嘗試使用 Gemini
+        image_data, prompt = generate_optimized_image_with_gemini(optimization_prompt, image_size)
+        if image_data:
+            st.info("🎨 使用 Gemini 2.5 Flash Image (nano-banana) 生成")
+            return image_data, prompt
+
+        # Gemini 失敗時使用 DALL-E 3
+        st.info("🎨 使用 DALL-E 3 生成（Gemini 不可用）")
+
+        # 將尺寸選項映射到 DALL-E 3 支援的尺寸
+        size_mapping = {
+            "1024x1024": "1024x1024",
+            "1792x1024": "1792x1024",
+            "1024x1792": "1024x1792"
+        }
+        dalle_size = size_mapping.get(image_size, "1024x1024")
+
         # 呼叫 DALL-E 3 API
         response = client.images.generate(
             model="dall-e-3",
             prompt=optimization_prompt,
-            size=image_size,
+            size=dalle_size,
             quality="standard",
             n=1,
         )
@@ -266,7 +318,7 @@ def get_brand_context(df):
 
 def main():
     st.title("📸 AI 圖片分析與優化")
-    st.markdown("上傳您的廣告圖片，獲得專業的 AI 分析與優化建議")
+    st.markdown("使用 GPT-4o Vision 分析圖片，並透過 Gemini 2.5 Flash Image (nano-banana) 生成優化圖片")
 
     # 載入數據和 API 客戶端
     df = load_meta_ads_data()

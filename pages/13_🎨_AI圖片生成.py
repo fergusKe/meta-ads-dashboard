@@ -170,7 +170,71 @@ def call_dalle_api(prompt, client, size="1024x1024"):
         st.error(f"❌ DALL-E 3 API 呼叫失敗：{str(e)}")
         return None
 
-def display_generated_image(image_data, prompt_info):
+
+def call_gemini_image_api(prompt, size="1024x1024"):
+    """呼叫 Gemini 生成圖片，若無圖片則回傳 None"""
+    api_key = os.getenv('GEMINI_API_KEY')
+    if not api_key:
+        return None
+
+    try:
+        from google import genai
+        from PIL import Image
+    except ImportError:
+        st.error("❌ 尚未安裝 google-genai 套件，請執行 `uv add google-genai`（或 `pip install google-genai`）後再試。")
+        return None
+
+    try:
+        # 初始化 Gemini 客戶端
+        client = genai.Client(api_key=api_key)
+        model_name = os.getenv('GEMINI_IMAGE_MODEL', 'gemini-2.5-flash-image')
+
+        st.info(f"🎯 使用模型：{model_name}")
+
+        # 顯示實際送出的 prompt
+        with st.expander("📝 送出的 Prompt", expanded=False):
+            st.text_area("Prompt 內容", value=prompt, height=200, disabled=True, label_visibility="collapsed")
+
+        # 呼叫 Gemini API（直接使用傳入的 prompt）
+        response = client.models.generate_content(
+            model=model_name,
+            contents=[prompt],
+        )
+
+        # Debug: 顯示原始回應
+        with st.expander("🧪 Gemini raw response (debug)", expanded=False):
+            try:
+                st.json(response.model_dump())
+            except Exception as e:
+                st.write(f"Response type: {type(response)}")
+                st.write(f"Response: {response}")
+
+        # 根據官方範例解析回應
+        if hasattr(response, 'candidates') and response.candidates:
+            for candidate in response.candidates:
+                if hasattr(candidate, 'content') and candidate.content:
+                    if hasattr(candidate.content, 'parts') and candidate.content.parts:
+                        for part in candidate.content.parts:
+                            # 檢查是否有 inline_data
+                            if hasattr(part, 'inline_data') and part.inline_data:
+                                if hasattr(part.inline_data, 'data') and part.inline_data.data:
+                                    # 返回二進制數據
+                                    return part.inline_data.data
+                            # 檢查是否有文字回應
+                            if hasattr(part, 'text') and part.text:
+                                st.info(f"📝 Gemini 回應文字：{part.text}")
+
+        st.warning("⚠️ Gemini 未回傳圖片內容，將改用 DALL-E 3。")
+
+    except Exception as exc:
+        st.error(f"❌ Gemini 生成失敗：{type(exc).__name__}: {exc}")
+        import traceback
+        with st.expander("🔍 詳細錯誤訊息", expanded=False):
+            st.code(traceback.format_exc())
+
+    return None
+
+def display_generated_image(image_data, prompt_info, provider=None):
     """顯示生成的圖片"""
     if not image_data:
         return
@@ -260,7 +324,7 @@ def display_style_examples():
 
 def main():
     st.title("🎨 AI 圖片生成")
-    st.markdown("使用 OpenAI DALL-E 3 為耘初茶食生成專業廣告圖片")
+    st.markdown("使用 Gemini 2.5 Flash Image (nano-banana) 為耘初茶食生成專業廣告圖片")
 
     # 載入數據和 API 客戶端
     df = load_meta_ads_data()
@@ -409,13 +473,20 @@ def main():
             )
 
             # 呼叫 API
-            image_data = call_dalle_api(prompt, client, image_size)
+            provider = None
+            image_data = call_gemini_image_api(prompt, image_size)
+            if image_data:
+                provider = "Gemini nano-banana"
+            else:
+                image_data = call_dalle_api(prompt, client, image_size)
+                if image_data:
+                    provider = "OpenAI DALL-E 3"
 
             if image_data:
                 if auto_generate:
-                    st.success("✅ 基於智能推薦的圖片生成完成！")
+                    st.success(f"✅ 基於智能推薦的圖片生成完成！（{provider}）")
                 else:
-                    st.success("✅ 圖片生成完成！")
+                    st.success(f"✅ 圖片生成完成！（{provider}）")
 
                 # 儲存歷史
                 save_generation_history(
@@ -429,7 +500,8 @@ def main():
                 # 顯示結果
                 display_generated_image(
                     image_data,
-                    {"prompt": prompt, "type": image_type, "style": style_preference}
+                    {"prompt": prompt, "type": image_type, "style": style_preference},
+                    provider
                 )
 
             else:
