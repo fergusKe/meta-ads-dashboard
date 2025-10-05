@@ -13,6 +13,14 @@ import re
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from utils.data_loader import load_meta_ads_data
+from utils.ad_display import (
+    display_top_bottom_ads,
+    get_sorted_ad_options,
+    format_ad_display_name,
+    display_ad_performance_table
+)
+from utils.llm_service import get_llm_service
+import json
 
 def show_creative_analysis():
     """顯示素材成效分析頁面"""
@@ -100,6 +108,34 @@ def show_creative_analysis():
 - 🛒 購買次數：{best_headline['購買次數']:.0f}
 - 👆 CTR：{best_headline['CTR（全部）']:.2f}%
                 """)
+
+                # 🎯 顯示使用這個 Headline 的廣告列表
+                st.markdown("#### 🎯 使用此 Headline 的廣告")
+
+                # 找出使用最佳 Headline 的所有廣告
+                ads_with_best_headline = headline_df[
+                    headline_df['headline'] == best_headline['headline']
+                ].copy()
+
+                if not ads_with_best_headline.empty:
+                    # 使用廣告顯示組件
+                    display_ad_performance_table(
+                        ads_with_best_headline,
+                        title="",
+                        sort_by='roas',
+                        columns=[
+                            '廣告階層',
+                            '購買 ROAS（廣告投資報酬率）',
+                            '花費金額 (TWD)',
+                            'CTR（全部）',
+                            '購買次數',
+                            '目標'
+                        ]
+                    )
+
+                    st.info(f"💡 共有 {len(ads_with_best_headline)} 個廣告使用此 Headline")
+                else:
+                    st.warning("找不到使用此 Headline 的廣告詳細資訊")
             else:
                 st.warning("⚠️ 沒有足夠曝光量（≥1000）的 Headline 數據")
 
@@ -518,7 +554,255 @@ def show_creative_analysis():
 
     st.markdown("---")
 
-    # ========== 第五部分：優化建議總結 ==========
+    # ========== 第五部分：整體素材對比與詳細查看 ==========
+    st.markdown("## 📊 整體素材對比")
+
+    # Top 10 vs Bottom 10 廣告對比
+    display_top_bottom_ads(
+        creative_df,
+        metric='購買 ROAS（廣告投資報酬率）',
+        top_n=10
+    )
+
+    st.markdown("---")
+
+    # ========== 選擇廣告查看詳細素材 ==========
+    st.markdown("## 🔍 查看特定廣告的素材細節")
+
+    st.info("💡 選擇廣告後，可以查看完整的 Headline、文案、CTA、受眾等資訊")
+
+    # 取得排序後的廣告選項
+    option_labels, data_map = get_sorted_ad_options(
+        creative_df,
+        sort_by='roas',
+        top_n=50  # 只顯示前 50 個
+    )
+
+    if option_labels:
+        selected_ad = st.selectbox(
+            "選擇要查看的廣告",
+            options=option_labels,
+            help="已按 ROAS 排序，優先顯示高效廣告"
+        )
+
+        if selected_ad:
+            ad_data = data_map[selected_ad]
+
+            # 顯示廣告詳細資訊
+            st.markdown("### 📋 廣告詳細資訊")
+
+            detail_col1, detail_col2 = st.columns([2, 1])
+
+            with detail_col1:
+                st.markdown("#### 📝 素材內容")
+
+                # Headline
+                headline = ad_data.get('headline', '未知')
+                if pd.notna(headline) and headline != '未知':
+                    st.markdown(f"**Headline**：{headline}")
+                    st.caption(f"長度：{len(str(headline))} 字元")
+
+                # 內文
+                body = ad_data.get('內文', '')
+                if pd.notna(body) and body:
+                    st.markdown(f"**內文**：")
+                    st.text_area("", value=body, height=150, disabled=True, label_visibility="collapsed")
+                    st.caption(f"長度：{len(str(body))} 字元")
+
+                # CTA
+                cta = ad_data.get('call_to_action_type', '未知')
+                if pd.notna(cta) and cta != '未知':
+                    st.markdown(f"**CTA 按鈕**：`{cta}`")
+
+            with detail_col2:
+                st.markdown("#### 📊 表現數據")
+
+                st.metric("ROAS", f"{ad_data.get('購買 ROAS（廣告投資報酬率）', 0):.2f}")
+                st.metric("花費", f"${ad_data.get('花費金額 (TWD)', 0):,.0f}")
+                st.metric("CTR", f"{ad_data.get('CTR（全部）', 0):.2f}%")
+                st.metric("購買次數", f"{ad_data.get('購買次數', 0):.0f}")
+
+                st.markdown("#### 👥 受眾資訊")
+                st.write(f"**目標受眾**：{ad_data.get('目標', '未知')}")
+                st.write(f"**年齡**：{ad_data.get('年齡', '未知')}")
+                st.write(f"**性別**：{ad_data.get('性別', '未知')}")
+
+                # 品質評分
+                quality = ad_data.get('品質排名', '未知')
+                engagement = ad_data.get('互動率排名', '未知')
+                conversion = ad_data.get('轉換率排名', '未知')
+
+                if quality != '未知' or engagement != '未知' or conversion != '未知':
+                    st.markdown("#### ⭐ 品質評分")
+                    st.write(f"**品質排名**：{quality}")
+                    st.write(f"**互動率排名**：{engagement}")
+                    st.write(f"**轉換率排名**：{conversion}")
+
+            # 學習建議
+            st.markdown("---")
+            st.markdown("### 💡 學習建議")
+
+            roas = ad_data.get('購買 ROAS（廣告投資報酬率）', 0)
+            if roas >= 3.0:
+                st.success(f"""
+**🏆 這是高效廣告（ROAS {roas:.2f}）- 值得學習**
+
+建議學習重點：
+1. **Headline 風格**：分析用詞、長度、訴求點
+2. **文案結構**：開頭、中段、結尾如何組織
+3. **受眾定位**：這個受眾群組為什麼有效
+4. **CTA 選擇**：為什麼選擇這個 CTA 類型
+
+📌 **行動方案**：複製此廣告的成功要素，應用到新廣告
+                """)
+            elif roas < 2.0:
+                st.warning(f"""
+**⚠️ 這是低效廣告（ROAS {roas:.2f}）- 需要優化**
+
+可能問題：
+1. **Headline 吸引力不足**？對比高效廣告的 Headline
+2. **文案未打中受眾痛點**？重新思考價值主張
+3. **CTA 不夠明確**？測試其他 CTA 類型
+4. **受眾不精準**？嘗試縮小受眾範圍
+
+📌 **行動方案**：參考 Top 10 高效廣告，重新設計素材
+                """)
+            else:
+                st.info(f"""
+**✅ 這是中等效能廣告（ROAS {roas:.2f}）- 有優化空間**
+
+優化方向：
+1. 參考 Top 10 廣告的 Headline 關鍵字
+2. 測試不同的 CTA 按鈕
+3. 優化文案長度和結構
+4. A/B 測試受眾群組
+
+📌 **行動方案**：小幅調整素材，測試成效
+                """)
+    else:
+        st.warning("沒有可用的廣告數據")
+
+    st.markdown("---")
+
+    # ========== 第六部分：AI 成功模式分析 ==========
+    st.markdown("## 🤖 AI 成功模式分析")
+
+    st.markdown("""
+    使用 AI 深度分析高效素材的共同特徵，找出可複製的成功模式。
+    """)
+
+    if st.button("🔍 使用 AI 分析成功素材模式", key="creative_ai_analysis"):
+        with st.spinner("AI 正在分析高效素材的成功模式..."):
+            try:
+                # 初始化 LLM 服務
+                llm_service = LLMService()
+
+                # 獲取高 ROAS 素材
+                high_roas_ads = creative_df[creative_df['購買 ROAS（廣告投資報酬率）'] >= 3.0].copy()
+
+                if high_roas_ads.empty:
+                    st.warning("沒有找到 ROAS >= 3.0 的廣告素材")
+                else:
+                    # 分析 Headline
+                    top_headlines = high_roas_ads.nlargest(10, '購買 ROAS（廣告投資報酬率）')['headline'].tolist()
+
+                    # 分析 CTA
+                    cta_dist = high_roas_ads['call_to_action_type'].value_counts().head(5).to_dict()
+
+                    # 分析長度
+                    avg_headline_length = high_roas_ads['headline'].str.len().mean()
+                    avg_body_length = high_roas_ads['內文'].str.len().mean() if '內文' in high_roas_ads.columns else 0
+
+                    # 分析數字指標
+                    avg_roas = high_roas_ads['購買 ROAS（廣告投資報酬率）'].mean()
+                    avg_ctr = high_roas_ads['CTR（全部）'].mean()
+                    total_purchases = high_roas_ads['購買次數'].sum()
+
+                    # 構建 Prompt
+                    prompt = f"""
+你是一位專業的廣告文案分析師，請分析以下高效廣告素材的共同特徵：
+
+**高效素材數據**（ROAS >= 3.0）：
+- 樣本數：{len(high_roas_ads)} 個廣告
+- 平均 ROAS：{avg_roas:.2f}
+- 平均 CTR：{avg_ctr:.2f}%
+- 總購買次數：{total_purchases:.0f}
+
+**Top 10 Headline 範例**：
+{chr(10).join([f'{i+1}. {h}' for i, h in enumerate(top_headlines[:10])])}
+
+**最常使用的 CTA**：
+{chr(10).join([f'- {cta}: {count} 次' for cta, count in list(cta_dist.items())[:5]])}
+
+**平均長度**：
+- Headline：{avg_headline_length:.0f} 字元
+- 內文：{avg_body_length:.0f} 字元
+
+請提供：
+
+1. **成功 Headline 共同特徵**（3-5 個關鍵模式）
+   - 用詞風格（如：數字、問句、行動導向）
+   - 結構特點
+   - 情感訴求
+
+2. **可複製的文案公式**
+   - 提供 3 個具體的 Headline 模板
+   - 每個模板說明適用場景
+   - 提供填空範例
+
+3. **CTA 優化建議**
+   - 為什麼這些 CTA 有效
+   - 在什麼情境下使用
+   - 搭配什麼樣的文案最好
+
+4. **立即可用的行動方案**
+   - 3 個可以立即測試的新 Headline
+   - 基於成功模式，但有所創新
+   - 說明為什麼預期會有效
+
+請使用繁體中文，語氣專業但易懂。格式使用 Markdown，重點使用粗體標註。提供的範例要具體且可直接使用。
+"""
+
+                    # 調用 LLM
+                    analysis = llm_service.generate_insights(
+                        prompt=prompt,
+                        model="gpt-3.5-turbo",
+                        max_tokens=2000,
+                        temperature=0.7
+                    )
+
+                    # 顯示分析結果
+                    st.success("✅ AI 分析完成")
+                    st.markdown(analysis)
+
+                    # 額外建議
+                    st.info(f"""
+💡 **使用建議**：
+1. 參考「可複製的文案公式」創建新廣告
+2. 測試「立即可用的行動方案」中的 3 個 Headline
+3. 在 A/B 測試中使用推薦的 CTA 組合
+4. 定期（每 2 週）重新分析，確保跟上趨勢
+
+**成本估算**：約 ${len(high_roas_ads) * 0.001:.3f} USD（使用 GPT-3.5 Turbo）
+                    """)
+
+            except Exception as e:
+                st.error(f"""
+**❌ AI 分析失敗**
+
+錯誤訊息：{str(e)}
+
+可能原因：
+- OpenAI API Key 未設定或無效
+- API 配額不足
+- 網路連線問題
+
+請檢查 .env 檔案中的 OPENAI_API_KEY 設定。
+                """)
+
+    st.markdown("---")
+
+    # ========== 第七部分：優化建議總結 ==========
     st.markdown("## 💡 素材優化建議總結")
 
     rec_col1, rec_col2 = st.columns(2)
@@ -562,6 +846,110 @@ def show_creative_analysis():
    - 嘗試新的 CTA 類型
    - 實驗 Emoji 使用策略
         """)
+
+    st.markdown("---")
+
+    # ========== 第八部分：AI 深度洞察 ==========
+    st.markdown("## 🤖 AI 深度洞察")
+    st.info("💡 使用 AI 分析高效與低效素材的差異，提供可執行的優化建議")
+
+    if st.button("🚀 生成 AI 深度洞察", type="primary", use_container_width=True):
+        with st.spinner("AI 正在分析素材數據..."):
+            ai_insights = generate_ai_creative_insights(df, high_roas_creatives, low_roas_creatives)
+
+            if ai_insights and not ai_insights.startswith("❌") and not ai_insights.startswith("⚠️"):
+                st.markdown("### 📊 AI 分析結果")
+                st.markdown(ai_insights)
+            else:
+                st.error(ai_insights if ai_insights else "AI 分析失敗")
+
+
+def generate_ai_creative_insights(all_creatives, high_roas_creatives, low_roas_creatives):
+    """
+    生成 AI 素材洞察
+
+    分析高效素材（前 25%）與低效素材（後 25%）的差異，
+    提供具體可執行的優化建議
+    """
+    llm_service = get_llm_service()
+
+    if not llm_service.is_available():
+        return "❌ AI 功能目前無法使用，請設定 OPENAI_API_KEY"
+
+    # 準備數據摘要
+    high_roas_summary = {
+        "count": len(high_roas_creatives),
+        "avg_roas": high_roas_creatives['ROAS'].mean() if len(high_roas_creatives) > 0 else 0,
+        "avg_ctr": high_roas_creatives['CTR'].mean() if len(high_roas_creatives) > 0 else 0,
+        "avg_cpc": high_roas_creatives['CPC'].mean() if len(high_roas_creatives) > 0 else 0,
+        "common_ctas": high_roas_creatives['CTA類型'].value_counts().head(3).to_dict() if len(high_roas_creatives) > 0 else {},
+        "avg_headline_len": high_roas_creatives['Headline長度'].mean() if len(high_roas_creatives) > 0 and 'Headline長度' in high_roas_creatives.columns else 0,
+        "avg_emoji_count": high_roas_creatives['文案Emoji數'].mean() if len(high_roas_creatives) > 0 and '文案Emoji數' in high_roas_creatives.columns else 0
+    }
+
+    low_roas_summary = {
+        "count": len(low_roas_creatives),
+        "avg_roas": low_roas_creatives['ROAS'].mean() if len(low_roas_creatives) > 0 else 0,
+        "avg_ctr": low_roas_creatives['CTR'].mean() if len(low_roas_creatives) > 0 else 0,
+        "avg_cpc": low_roas_creatives['CPC'].mean() if len(low_roas_creatives) > 0 else 0,
+        "common_ctas": low_roas_creatives['CTA類型'].value_counts().head(3).to_dict() if len(low_roas_creatives) > 0 else {},
+        "avg_headline_len": low_roas_creatives['Headline長度'].mean() if len(low_roas_creatives) > 0 and 'Headline長度' in low_roas_creatives.columns else 0,
+        "avg_emoji_count": low_roas_creatives['文案Emoji數'].mean() if len(low_roas_creatives) > 0 and '文案Emoji數' in low_roas_creatives.columns else 0
+    }
+
+    # 構建 prompt
+    prompt = f"""
+請分析以下 Meta 廣告素材數據，找出高效與低效素材的關鍵差異。
+
+## 高效素材數據（前 25% ROAS）
+- 數量：{high_roas_summary['count']} 個素材
+- 平均 ROAS：{high_roas_summary['avg_roas']:.2f}
+- 平均 CTR：{high_roas_summary['avg_ctr']:.2%}
+- 平均 CPC：${high_roas_summary['avg_cpc']:.2f}
+- 常見 CTA：{json.dumps(high_roas_summary['common_ctas'], ensure_ascii=False)}
+- 平均 Headline 長度：{high_roas_summary['avg_headline_len']:.0f} 字元
+- 平均 Emoji 數量：{high_roas_summary['avg_emoji_count']:.1f} 個
+
+## 低效素材數據（後 25% ROAS）
+- 數量：{low_roas_summary['count']} 個素材
+- 平均 ROAS：{low_roas_summary['avg_roas']:.2f}
+- 平均 CTR：{low_roas_summary['avg_ctr']:.2%}
+- 平均 CPC：${low_roas_summary['avg_cpc']:.2f}
+- 常見 CTA：{json.dumps(low_roas_summary['common_ctas'], ensure_ascii=False)}
+- 平均 Headline 長度：{low_roas_summary['avg_headline_len']:.0f} 字元
+- 平均 Emoji 數量：{low_roas_summary['avg_emoji_count']:.1f} 個
+
+## 請提供以下分析：
+
+### 1. 成功素材的共同特徵（3-5 點）
+找出高效素材在 CTA、標題長度、文案風格、Emoji 使用等方面的共同模式
+
+### 2. 失敗素材的常見問題（3-5 點）
+分析低效素材可能存在的問題和改善空間
+
+### 3. 具體優化建議（5 個）
+基於數據差異，提供可立即執行的素材優化行動，格式：
+- **建議標題**：具體做法 + 預期效果
+
+### 4. A/B 測試提案（2-3 個）
+建議值得測試的素材變因，例如：
+- 測試變因：CTA 類型（SHOP_NOW vs LEARN_MORE）
+- 假設：SHOP_NOW 可能提升 20% 轉換率
+- 測試方法：各分配 50% 預算，執行 7 天
+
+### 5. 下一波素材方向
+基於成功模式，建議下一波廣告素材的創意方向
+
+請用繁體中文回答，語氣專業但易懂，使用 Markdown 格式。
+"""
+
+    return llm_service.generate_insights(
+        prompt=prompt,
+        model="gpt-4o-mini",
+        max_tokens=2000,
+        temperature=0.7
+    )
+
 
 if __name__ == "__main__":
     show_creative_analysis()

@@ -9,6 +9,10 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from utils.data_loader import load_meta_ads_data, calculate_summary_metrics
+from utils.ad_display import (
+    display_top_bottom_ads,
+    format_ad_display_name
+)
 
 def show_performance_dashboard():
     """顯示整體效能儀表板 - 升級版"""
@@ -381,7 +385,71 @@ def show_performance_dashboard():
 
     st.markdown("---")
 
-    # ========== 第五部分：數據摘要 ==========
+    # ========== 第五部分：表現最佳與最差廣告 ==========
+    st.markdown("## 🎯 表現最佳與最差廣告")
+
+    st.markdown("""
+    快速識別表現突出的廣告（值得擴大預算）和表現不佳的廣告（需要優化或暫停）。
+    """)
+
+    # 添加廣告階層顯示
+    df['廣告階層'] = df.apply(format_ad_display_name, axis=1)
+
+    # 按 ROAS 顯示 Top/Bottom 廣告
+    st.markdown("### 📊 ROAS 表現對比")
+    display_top_bottom_ads(
+        df,
+        metric='購買 ROAS（廣告投資報酬率）',
+        top_n=10
+    )
+
+    # 按花費金額顯示 Top 廣告（花費最多的廣告）
+    st.markdown("### 💰 花費最多的廣告")
+    st.markdown("這些廣告消耗了最多預算，需要密切監控其 ROAS 是否達標。")
+
+    top_spend_ads = df.nlargest(10, '花費金額 (TWD)')
+
+    st.dataframe(
+        top_spend_ads[[
+            '廣告階層',
+            '花費金額 (TWD)',
+            '購買 ROAS（廣告投資報酬率）',
+            '購買次數',
+            'CTR（全部）',
+            '每次購買的成本'
+        ]],
+        use_container_width=True,
+        column_config={
+            "廣告階層": "廣告",
+            "花費金額 (TWD)": st.column_config.NumberColumn("花費", format="$%d"),
+            "購買 ROAS（廣告投資報酬率）": st.column_config.NumberColumn("ROAS", format="%.2f"),
+            "購買次數": st.column_config.NumberColumn("購買次數", format="%d"),
+            "CTR（全部）": st.column_config.NumberColumn("CTR (%)", format="%.2f"),
+            "每次購買的成本": st.column_config.NumberColumn("CPA", format="$%.0f")
+        },
+        hide_index=True
+    )
+
+    # 關鍵洞察
+    high_spend_low_roas = top_spend_ads[top_spend_ads['購買 ROAS（廣告投資報酬率）'] < 2.0]
+
+    if not high_spend_low_roas.empty:
+        st.error(f"""
+**⚠️ 警告：發現 {len(high_spend_low_roas)} 個高花費但低 ROAS 的廣告**
+
+這些廣告消耗大量預算但回報不佳，建議：
+1. 立即降低預算或暫停
+2. 分析失敗原因（受眾、素材、Landing Page）
+3. 將預算轉移到高 ROAS 廣告
+
+**潛在節省**：若暫停這些廣告，可節省約 ${high_spend_low_roas['花費金額 (TWD)'].sum():,.0f}
+        """)
+    else:
+        st.success("✅ 所有高花費廣告的 ROAS 都在合理範圍內")
+
+    st.markdown("---")
+
+    # ========== 第六部分：數據摘要 ==========
     st.markdown("## 📋 數據摘要")
 
     summary_col1, summary_col2, summary_col3 = st.columns(3)

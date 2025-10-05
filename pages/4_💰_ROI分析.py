@@ -11,6 +11,10 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from utils.data_loader import load_meta_ads_data, calculate_summary_metrics
+from utils.ad_display import (
+    display_top_bottom_ads,
+    format_ad_display_name
+)
 
 def show_roi_analysis():
     """顯示 ROI 分析頁面 - 升級版"""
@@ -475,6 +479,167 @@ def show_roi_analysis():
     )
 
     st.plotly_chart(fig_waterfall, use_container_width=True)
+
+    st.markdown("---")
+
+    # ========== 新增部分：最賺錢與最虧錢的廣告 ==========
+    st.markdown("## 💎 最賺錢與最虧錢的廣告")
+
+    st.markdown("""
+    識別投資報酬率最好和最差的廣告，優化預算分配，最大化利潤。
+    """)
+
+    # 添加廣告階層顯示
+    df['廣告階層'] = df.apply(format_ad_display_name, axis=1)
+
+    # 計算每個廣告的利潤
+    if '購買轉換值' in df.columns:
+        df['利潤'] = df['購買轉換值'] - df['花費金額 (TWD)']
+        df['利潤率'] = (df['利潤'] / df['花費金額 (TWD)'] * 100).round(2)
+    else:
+        st.warning("缺少「購買轉換值」欄位，無法計算利潤")
+        df['利潤'] = 0
+        df['利潤率'] = 0
+
+    # 按利潤顯示 Top/Bottom 廣告
+    st.markdown("### 💰 利潤對比：Top 10 vs Bottom 10")
+    display_top_bottom_ads(
+        df,
+        metric='利潤',
+        top_n=10
+    )
+
+    # 詳細分析
+    st.markdown("### 📊 詳細投資回報分析")
+
+    analysis_col1, analysis_col2 = st.columns(2)
+
+    with analysis_col1:
+        st.markdown("#### 🏆 最賺錢的廣告")
+
+        top_profit_ads = df.nlargest(10, '利潤')
+
+        st.dataframe(
+            top_profit_ads[[
+                '廣告階層',
+                '花費金額 (TWD)',
+                '購買轉換值',
+                '利潤',
+                '購買 ROAS（廣告投資報酬率）',
+                '利潤率'
+            ]],
+            use_container_width=True,
+            column_config={
+                "廣告階層": "廣告",
+                "花費金額 (TWD)": st.column_config.NumberColumn("投資", format="$%d"),
+                "購買轉換值": st.column_config.NumberColumn("營收", format="$%.0f"),
+                "利潤": st.column_config.NumberColumn("利潤", format="$%.0f"),
+                "購買 ROAS（廣告投資報酬率）": st.column_config.NumberColumn("ROAS", format="%.2f"),
+                "利潤率": st.column_config.NumberColumn("利潤率 (%)", format="%.1f%%")
+            },
+            hide_index=True
+        )
+
+        total_top_profit = top_profit_ads['利潤'].sum()
+        total_top_spend = top_profit_ads['花費金額 (TWD)'].sum()
+        avg_top_roas = top_profit_ads['購買 ROAS（廣告投資報酬率）'].mean()
+
+        st.success(f"""
+**Top 10 摘要**：
+- 總投資：${total_top_spend:,.0f}
+- 總利潤：${total_top_profit:,.0f}
+- 平均 ROAS：{avg_top_roas:.2f}
+
+**建議**：
+✅ 增加這些廣告的預算 50-100%
+✅ 複製成功模式到新廣告
+✅ 延長投放時間
+        """)
+
+    with analysis_col2:
+        st.markdown("#### ⚠️ 最虧錢的廣告")
+
+        bottom_profit_ads = df.nsmallest(10, '利潤')
+
+        st.dataframe(
+            bottom_profit_ads[[
+                '廣告階層',
+                '花費金額 (TWD)',
+                '購買轉換值',
+                '利潤',
+                '購買 ROAS（廣告投資報酬率）',
+                '利潤率'
+            ]],
+            use_container_width=True,
+            column_config={
+                "廣告階層": "廣告",
+                "花費金額 (TWD)": st.column_config.NumberColumn("投資", format="$%d"),
+                "購買轉換值": st.column_config.NumberColumn("營收", format="$%.0f"),
+                "利潤": st.column_config.NumberColumn("虧損", format="$%.0f"),
+                "購買 ROAS（廣告投資報酬率）": st.column_config.NumberColumn("ROAS", format="%.2f"),
+                "利潤率": st.column_config.NumberColumn("利潤率 (%)", format="%.1f%%")
+            },
+            hide_index=True
+        )
+
+        total_bottom_loss = bottom_profit_ads['利潤'].sum()
+        total_bottom_spend = bottom_profit_ads['花費金額 (TWD)'].sum()
+        avg_bottom_roas = bottom_profit_ads['購買 ROAS（廣告投資報酬率）'].mean()
+
+        st.error(f"""
+**Bottom 10 摘要**：
+- 總投資：${total_bottom_spend:,.0f}
+- 總虧損：${abs(total_bottom_loss):,.0f}
+- 平均 ROAS：{avg_bottom_roas:.2f}
+
+**建議**：
+❌ 立即暫停 ROAS < 1.0 的廣告
+⚠️ 大幅降低預算 (-70%)
+💡 分析失敗原因後重新設計
+        """)
+
+    # 預算優化潛力
+    st.markdown("### 🚀 預算優化潛力")
+
+    # 計算如果停止虧損廣告並將預算轉移到盈利廣告的效果
+    losing_ads = df[df['利潤'] < 0]
+    profitable_ads = df[df['利潤'] > 0]
+
+    if not losing_ads.empty and not profitable_ads.empty:
+        losing_spend = losing_ads['花費金額 (TWD)'].sum()
+        losing_loss = abs(losing_ads['利潤'].sum())
+        profitable_avg_profit_rate = (profitable_ads['利潤'].sum() / profitable_ads['花費金額 (TWD)'].sum())
+
+        potential_profit_from_reallocation = losing_spend * profitable_avg_profit_rate
+        total_improvement = losing_loss + potential_profit_from_reallocation
+
+        col1, col2, col3 = st.columns(3)
+
+        with col1:
+            st.metric("虧損廣告總支出", f"${losing_spend:,.0f}")
+            st.metric("當前總虧損", f"${losing_loss:,.0f}")
+
+        with col2:
+            st.metric("盈利廣告平均利潤率", f"{profitable_avg_profit_rate*100:.1f}%")
+            st.metric("預算轉移後預期利潤", f"${potential_profit_from_reallocation:,.0f}")
+
+        with col3:
+            st.metric("總改善潛力", f"${total_improvement:,.0f}", delta=f"+{total_improvement/total_spend*100:.1f}%")
+
+        st.info(f"""
+**💡 優化策略**：
+
+如果將虧損廣告的預算（${losing_spend:,.0f}）轉移到盈利廣告：
+
+1. **避免虧損**：${losing_loss:,.0f}
+2. **獲得利潤**：${potential_profit_from_reallocation:,.0f}
+3. **總改善**：${total_improvement:,.0f}（ROI 提升 {total_improvement/total_spend*100:.1f}%）
+
+**行動方案**：
+- 立即暫停所有虧損廣告（{len(losing_ads)} 個）
+- 將預算重新分配到 Top 10 盈利廣告
+- 預期整體利潤提升 {total_improvement/profit*100:.1f}%
+        """)
 
 if __name__ == "__main__":
     show_roi_analysis()

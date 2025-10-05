@@ -11,16 +11,17 @@ from utils.data_loader import load_meta_ads_data
 
 st.set_page_config(page_title="AI 圖片生成", page_icon="🎨", layout="wide")
 
-def load_gemini_client():
-    """載入 Gemini 客戶端設定"""
+def load_openai_client():
+    """載入 OpenAI 客戶端設定"""
     try:
-        api_key = os.getenv('GEMINI_API_KEY')
+        from openai import OpenAI
+        api_key = os.getenv('OPENAI_API_KEY')
         if not api_key:
-            st.error("❌ 請在 .env 檔案中設定 GEMINI_API_KEY")
+            st.error("❌ 請在 .env 檔案中設定 OPENAI_API_KEY")
             return None
-        return api_key
+        return OpenAI(api_key=api_key)
     except Exception as e:
-        st.error(f"❌ Gemini 初始化失敗：{str(e)}")
+        st.error(f"❌ OpenAI 初始化失敗：{str(e)}")
         return None
 
 def analyze_brand_style(df):
@@ -133,41 +134,40 @@ def generate_image_prompt(image_type, style_preferences, brand_analysis, user_re
 
     return prompt
 
-def call_gemini_api(prompt, api_key):
-    """呼叫 Gemini nano-banana API 生成圖片"""
+def call_dalle_api(prompt, client, size="1024x1024"):
+    """呼叫 OpenAI DALL-E 3 API 生成圖片"""
     try:
-        # 注意：這裡使用假設的 Gemini 圖片生成 API 端點
-        # 實際開發時需要根據真實的 Gemini API 文檔調整
-        url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-nano-banana:generateImage"
-
-        headers = {
-            "Authorization": f"Bearer {api_key}",
-            "Content-Type": "application/json"
+        # 將尺寸選項映射到 DALL-E 3 支援的尺寸
+        size_mapping = {
+            "1:1 (1024x1024) - Instagram貼文": "1024x1024",
+            "16:9 (1920x1080) - Facebook橫幅": "1792x1024",
+            "9:16 (1080x1920) - Stories": "1024x1792"
         }
 
-        data = {
-            "prompt": prompt,
-            "image_config": {
-                "size": "1024x1024",
-                "quality": "high",
-                "style": "photorealistic"
-            }
-        }
+        dalle_size = size_mapping.get(size, "1024x1024")
 
-        response = requests.post(url, headers=headers, json=data, timeout=60)
+        # 呼叫 DALL-E 3 API
+        response = client.images.generate(
+            model="dall-e-3",
+            prompt=prompt,
+            size=dalle_size,
+            quality="standard",
+            n=1,
+        )
 
-        if response.status_code == 200:
-            result = response.json()
-            return result.get('image_data', None)
+        # 取得圖片 URL
+        image_url = response.data[0].url
+
+        # 下載圖片
+        img_response = requests.get(image_url, timeout=30)
+        if img_response.status_code == 200:
+            return img_response.content
         else:
-            st.error(f"❌ API 請求失敗：{response.status_code} - {response.text}")
+            st.error(f"❌ 圖片下載失敗：{img_response.status_code}")
             return None
 
-    except requests.exceptions.Timeout:
-        st.error("❌ API 請求超時，請稍後再試")
-        return None
     except Exception as e:
-        st.error(f"❌ API 呼叫失敗：{str(e)}")
+        st.error(f"❌ DALL-E 3 API 呼叫失敗：{str(e)}")
         return None
 
 def display_generated_image(image_data, prompt_info):
@@ -176,10 +176,9 @@ def display_generated_image(image_data, prompt_info):
         return
 
     try:
-        # 假設 API 返回 base64 編碼的圖片
-        if isinstance(image_data, str):
-            image_bytes = base64.b64decode(image_data)
-            image = Image.open(BytesIO(image_bytes))
+        # DALL-E 3 返回圖片的二進制數據
+        if isinstance(image_data, bytes):
+            image = Image.open(BytesIO(image_data))
 
             # 顯示圖片
             st.image(image, caption="AI 生成圖片", use_column_width=True)
@@ -203,7 +202,7 @@ def display_generated_image(image_data, prompt_info):
             # 顯示提示詞信息
             with st.expander("🎯 生成參數", expanded=False):
                 st.write("**提示詞：**")
-                st.text_area("", value=prompt_info.get('prompt', ''), height=150, disabled=True)
+                st.text_area("提示詞內容", value=prompt_info.get('prompt', ''), height=150, disabled=True, label_visibility="collapsed")
 
         else:
             st.error("❌ 圖片數據格式錯誤")
@@ -261,13 +260,13 @@ def display_style_examples():
 
 def main():
     st.title("🎨 AI 圖片生成")
-    st.markdown("使用 Gemini nano-banana 為耘初茶食生成專業廣告圖片")
+    st.markdown("使用 OpenAI DALL-E 3 為耘初茶食生成專業廣告圖片")
 
     # 載入數據和 API 客戶端
     df = load_meta_ads_data()
-    api_key = load_gemini_client()
+    client = load_openai_client()
 
-    if not api_key:
+    if not client:
         st.stop()
 
     # 側邊欄設定
@@ -395,7 +394,7 @@ def main():
                 )
 
                 # 呼叫 API
-                image_data = call_gemini_api(prompt, api_key)
+                image_data = call_dalle_api(prompt, client, image_size)
 
                 if image_data:
                     if auto_generate:

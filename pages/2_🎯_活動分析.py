@@ -11,6 +11,10 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from utils.data_loader import load_meta_ads_data
+from utils.ad_display import (
+    display_top_bottom_ads,
+    format_ad_display_name
+)
 
 def show_campaign_analysis():
     """顯示活動分析頁面 - 升級版"""
@@ -509,7 +513,84 @@ def show_campaign_analysis():
 
     st.markdown("---")
 
-    # ========== 第五部分：優化建議 ==========
+    # ========== 第五部分：活動內廣告表現對比 ==========
+    st.markdown("## 📊 活動內廣告表現對比")
+
+    st.markdown("""
+    查看所選活動中，哪些具體廣告表現最好/最差。幫助您快速決定預算分配。
+    """)
+
+    # 添加廣告階層顯示
+    filtered_df['廣告階層'] = filtered_df.apply(format_ad_display_name, axis=1)
+
+    # 顯示 Top/Bottom 廣告
+    if not filtered_df.empty:
+        display_top_bottom_ads(
+            filtered_df,
+            metric='購買 ROAS（廣告投資報酬率）',
+            top_n=10
+        )
+
+        # 預算優化建議
+        st.markdown("### 💰 預算優化建議")
+
+        top_ads = filtered_df.nlargest(10, '購買 ROAS（廣告投資報酬率）')
+        bottom_ads = filtered_df.nsmallest(10, '購買 ROAS（廣告投資報酬率）')
+
+        top_spend = top_ads['花費金額 (TWD)'].sum()
+        bottom_spend = bottom_ads['花費金額 (TWD)'].sum()
+        top_roas = top_ads['購買 ROAS（廣告投資報酬率）'].mean()
+        bottom_roas = bottom_ads['購買 ROAS（廣告投資報酬率）'].mean()
+
+        col1, col2 = st.columns(2)
+
+        with col1:
+            st.success(f"""
+**🏆 Top 10 廣告**
+
+- 總花費：${top_spend:,.0f}
+- 平均 ROAS：{top_roas:.2f}
+- 總購買：{top_ads['購買次數'].sum():.0f} 次
+
+**建議**：
+✅ 增加這些廣告的預算
+✅ 複製成功素材到新廣告
+✅ 擴大類似受眾
+            """)
+
+        with col2:
+            st.warning(f"""
+**⚠️ Bottom 10 廣告**
+
+- 總花費：${bottom_spend:,.0f}
+- 平均 ROAS：{bottom_roas:.2f}
+- 總購買：{bottom_ads['購買次數'].sum():.0f} 次
+
+**建議**：
+❌ 暫停 ROAS < 1.0 的廣告
+⚠️ 降低預算或優化素材
+💡 將預算轉移到 Top 10
+            """)
+
+        # 預算轉移潛力
+        if bottom_roas < 1.5 and top_roas > 3.0:
+            potential_saving = bottom_spend
+            potential_revenue_increase = potential_saving * top_roas
+
+            st.info(f"""
+**💡 預算轉移潛力分析**
+
+如果將 Bottom 10 的預算（${potential_saving:,.0f}）轉移到 Top 10 類型的廣告：
+- 預期 ROAS：{bottom_roas:.2f}x → {top_roas:.2f}x
+- 預期營收增加：${potential_revenue_increase:,.0f}
+- 預期利潤增加：${potential_revenue_increase - potential_saving:,.0f}
+
+**建議**：立即執行預算重新分配！
+            """)
+
+    st.markdown("---")
+
+    # ========== 第六部分：優化建議 ==========
     st.markdown("## 💡 智能優化建議")
 
     suggestion_col1, suggestion_col2 = st.columns(2)

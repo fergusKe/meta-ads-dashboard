@@ -5,7 +5,10 @@ import plotly.express as px
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 from utils.data_loader import load_meta_ads_data, filter_data_by_date_range
+from utils.llm_service import get_llm_service
+from utils.rag_service import RAGService
 import numpy as np
+import json
 
 def show_optimization_recommendations():
     """顯示即時優化建議頁面"""
@@ -65,6 +68,27 @@ def show_optimization_recommendations():
         if urgent_recommendations:
             for i, rec in enumerate(urgent_recommendations):
                 create_recommendation_card(rec, f"urgent_{i}")
+
+            # 🤖 AI 緊急問題分析
+            llm_service = get_llm_service()
+            if llm_service.is_available():
+                st.markdown("---")
+                st.markdown("#### 🤖 AI 深度緊急分析")
+
+                if st.button("🚨 開始 AI 緊急分析", type="primary", key="urgent_ai_analysis"):
+                    with st.spinner("AI 正在分析緊急問題..."):
+                        urgent_analysis = generate_ai_urgent_analysis(
+                            filtered_df,
+                            urgent_recommendations,
+                            target_roas,
+                            max_cpa
+                        )
+
+                        if urgent_analysis and "error" not in urgent_analysis:
+                            st.success("✅ AI 緊急分析完成！")
+                            st.markdown(urgent_analysis)
+                        else:
+                            st.error("分析失敗，請稍後再試")
         else:
             st.success("✅ 沒有發現需要緊急處理的問題")
 
@@ -85,6 +109,136 @@ def show_optimization_recommendations():
                     "建議動作": st.column_config.TextColumn("建議", width="large")
                 }
             )
+
+            # 🤖 AI 深度根因分析
+            st.markdown("---")
+            st.markdown("#### 🤖 AI 深度根因分析")
+
+            llm_service = get_llm_service()
+
+            if llm_service.is_available():
+                # RAG 增強選項
+                use_rag = st.checkbox(
+                    "🧠 啟用智能增強（參考歷史成功案例）",
+                    value=True,
+                    help="使用 RAG 技術從歷史高效廣告中學習優化策略"
+                )
+
+                st.info("💡 **AI 功能已啟用** - 選擇要分析的廣告，AI 會提供專屬優化建議")
+
+                # 準備更詳細的選單選項
+                campaign_options = []
+                campaign_data_map = {}
+
+                for idx, row in problem_campaigns.iterrows():
+                    # 建立易讀的選項標籤
+                    roas = row['購買 ROAS（廣告投資報酬率）']
+                    spend = row['花費金額 (TWD)']
+                    problem_type = row['問題類型']
+                    campaign_name = row['行銷活動名稱']
+
+                    # 從完整數據中取得更多資訊（廣告組合、廣告名稱）
+                    full_data = filtered_df[filtered_df['行銷活動名稱'] == campaign_name]
+
+                    if not full_data.empty:
+                        first_row = full_data.iloc[0]
+                        ad_set_name = first_row.get('廣告組合名稱', '')
+                        ad_name = first_row.get('廣告名稱', '')
+
+                        # 建立完整的廣告階層顯示
+                        # 格式：行銷活動 > 廣告組合 > 廣告
+                        hierarchy_parts = []
+
+                        if campaign_name:
+                            hierarchy_parts.append(campaign_name[:30])  # 限制長度
+
+                        if ad_set_name and ad_set_name != campaign_name:
+                            hierarchy_parts.append(ad_set_name[:30])
+
+                        if ad_name and ad_name != campaign_name and ad_name != ad_set_name:
+                            hierarchy_parts.append(ad_name[:30])
+
+                        display_name = " > ".join(hierarchy_parts)
+                    else:
+                        display_name = campaign_name[:60]
+
+                    # 組合完整標籤（包含關鍵指標）
+                    # 格式：💰 $花費 | ROAS x.xx | 問題類型 | 廣告階層
+                    option_label = f"💰${spend:,.0f} | ROAS {roas:.2f} | {problem_type} | {display_name}"
+
+                    campaign_options.append({
+                        'label': option_label,
+                        'spend': spend,  # 用於排序
+                        'data': row,
+                        'name': campaign_name
+                    })
+
+                # 按照花費排序（花費高的優先顯示）
+                sorted_options = sorted(campaign_options, key=lambda x: x['spend'], reverse=True)
+
+                # 建立選項列表和映射
+                option_labels = [opt['label'] for opt in sorted_options]
+                for opt in sorted_options:
+                    campaign_data_map[opt['label']] = {
+                        'data': opt['data'],
+                        'name': opt['name']
+                    }
+
+                selected_option = st.selectbox(
+                    "選擇要深度分析的廣告",
+                    options=option_labels,
+                    help="已按花費由高到低排序。格式：💰花費 | ROAS | 問題類型 | 行銷活動 > 廣告組合 > 廣告"
+                )
+
+                # 取得對應的廣告數據
+                selected_campaign_info = campaign_data_map[selected_option]
+                selected_campaign = selected_campaign_info['name']
+                selected_campaign_data = selected_campaign_info['data']
+
+                if st.button("🔍 開始 AI 分析", type="primary"):
+                    with st.spinner(f"AI 正在分析「{selected_campaign}」..."):
+                        # 取得該廣告在完整數據中的詳細資訊
+                        full_campaign_data = filtered_df[
+                            filtered_df['行銷活動名稱'] == selected_campaign
+                        ]
+
+                        ai_analysis = generate_ai_root_cause_analysis_single(
+                            selected_campaign_data,
+                            full_campaign_data,
+                            filtered_df,
+                            target_roas,
+                            max_cpa,
+                            use_rag=use_rag
+                        )
+
+                        if ai_analysis and "error" not in ai_analysis:
+                            st.success(f"✅ AI 已完成「{selected_campaign}」的深度分析！")
+
+                            # 顯示分析結果
+                            display_ai_analysis(ai_analysis, selected_campaign)
+                        else:
+                            st.error(ai_analysis if isinstance(ai_analysis, str) else ai_analysis.get("error", "分析失敗"))
+            else:
+                st.warning("⚠️ AI 功能未啟用。請設定 OPENAI_API_KEY 以使用 AI 深度分析功能。")
+                with st.expander("📖 如何設定 API Key"):
+                    st.markdown("""
+                    **方法 1：使用環境變數**
+                    ```bash
+                    export OPENAI_API_KEY='your-api-key-here'
+                    ```
+
+                    **方法 2：使用 .env 檔案**
+                    在專案根目錄建立 `.env` 檔案：
+                    ```
+                    OPENAI_API_KEY=your-api-key-here
+                    ```
+
+                    **方法 3：使用 Streamlit Secrets**
+                    在 `.streamlit/secrets.toml` 中加入：
+                    ```
+                    OPENAI_API_KEY = "your-api-key-here"
+                    ```
+                    """)
         else:
             st.info("所有活動表現正常")
 
@@ -145,6 +299,26 @@ def show_optimization_recommendations():
                         for solution in issue_analysis['solutions']:
                             st.success(f"✅ {solution}")
 
+            # 🤖 AI 效能優化分析
+            llm_service = get_llm_service()
+            if llm_service.is_available():
+                st.markdown("---")
+                st.markdown("#### 🤖 AI 效能優化深度分析")
+
+                if st.button("📈 開始 AI 效能分析", type="primary", key="performance_ai_analysis"):
+                    with st.spinner("AI 正在分析效能優化機會..."):
+                        performance_analysis = generate_ai_performance_analysis(
+                            filtered_df,
+                            top_performers,
+                            underperformers,
+                            target_roas
+                        )
+
+                        if performance_analysis and "error" not in performance_analysis:
+                            st.success("✅ AI 效能分析完成！")
+                            st.markdown(performance_analysis)
+                        else:
+                            st.error("分析失敗，請稍後再試")
         else:
             st.success("所有活動效能表現良好")
 
@@ -203,6 +377,26 @@ def show_optimization_recommendations():
                     "原因": st.column_config.TextColumn("調整原因", width="large")
                 }
             )
+
+            # 🤖 AI 預算優化分析
+            llm_service = get_llm_service()
+            if llm_service.is_available():
+                st.markdown("---")
+                st.markdown("#### 🤖 AI 智能預算優化分析")
+
+                if st.button("💰 開始 AI 預算分析", type="primary", key="budget_ai_analysis"):
+                    with st.spinner("AI 正在分析預算優化策略..."):
+                        budget_analysis = generate_ai_budget_analysis(
+                            filtered_df,
+                            budget_recommendations,
+                            target_roas
+                        )
+
+                        if budget_analysis and "error" not in budget_analysis:
+                            st.success("✅ AI 預算分析完成！")
+                            st.markdown(budget_analysis)
+                        else:
+                            st.error("分析失敗，請稍後再試")
 
     with tab4:
         st.markdown("### 🎯 策略優化建議")
@@ -721,6 +915,503 @@ def generate_action_plan(analysis_results, strategy_analysis):
     })
 
     return actions
+
+def generate_ai_root_cause_analysis_single(campaign_data, full_campaign_data, all_campaigns_df, target_roas, max_cpa, use_rag=False):
+    """
+    使用 AI 針對單一廣告進行深度根因分析
+
+    Args:
+        campaign_data: 選擇的活動數據（Series）
+        full_campaign_data: 該活動的完整數據（DataFrame，可能有多筆記錄）
+        all_campaigns_df: 所有活動 DataFrame（用於對比）
+        target_roas: 目標 ROAS
+        max_cpa: 最大 CPA
+        use_rag: 是否使用 RAG 增強（參考歷史成功案例）
+
+    Returns:
+        AI 分析結果
+    """
+    llm_service = get_llm_service()
+
+    if not llm_service.is_available():
+        return "AI 服務目前無法使用"
+
+    # 準備該廣告的詳細數據
+    campaign_name = campaign_data['行銷活動名稱']
+
+    # 從完整數據中取得更多資訊
+    if not full_campaign_data.empty:
+        full_data = full_campaign_data.iloc[0]
+
+        campaign_details = {
+            "活動名稱": campaign_name,
+            "問題類型": campaign_data['問題類型'],
+            "表現數據": {
+                "ROAS": f"{campaign_data['購買 ROAS（廣告投資報酬率）']:.2f}",
+                "CPA": f"{campaign_data['每次購買的成本']:.0f}",
+                "花費": f"{campaign_data['花費金額 (TWD)']:,.0f}",
+                "CTR": f"{full_data.get('CTR（全部）', 0):.2f}%",
+                "購買次數": f"{full_data.get('購買次數', 0):.0f}",
+                "觸及人數": f"{full_data.get('觸及人數', 0):,.0f}",
+                "點擊次數": f"{full_data.get('連結點擊次數', 0):,.0f}",
+            },
+            "受眾資訊": {
+                "目標受眾": full_data.get('目標', '未知'),
+                "年齡": full_data.get('年齡', '未知'),
+                "性別": full_data.get('性別', '未知'),
+            },
+            "廣告素材": {
+                "標題": full_data.get('標題', '未知')[:100] if pd.notna(full_data.get('標題')) else '未知',
+                "內文": full_data.get('內文', '未知')[:200] if pd.notna(full_data.get('內文')) else '未知',
+            },
+            "品質評分": {
+                "品質排名": full_data.get('品質排名', '未知'),
+                "互動率排名": full_data.get('互動率排名', '未知'),
+                "轉換率排名": full_data.get('轉換率排名', '未知'),
+            }
+        }
+    else:
+        campaign_details = {
+            "活動名稱": campaign_name,
+            "問題類型": campaign_data['問題類型'],
+            "ROAS": f"{campaign_data['購買 ROAS（廣告投資報酬率）']:.2f}",
+            "CPA": f"{campaign_data['每次購買的成本']:.0f}",
+            "花費": f"{campaign_data['花費金額 (TWD)']:,.0f}"
+        }
+
+    # 準備對比數據（高表現活動參考）
+    high_performers = all_campaigns_df[
+        all_campaigns_df['購買 ROAS（廣告投資報酬率）'] >= target_roas
+    ]
+
+    if not high_performers.empty:
+        avg_high_performer = {
+            "平均ROAS": f"{high_performers['購買 ROAS（廣告投資報酬率）'].mean():.2f}",
+            "平均CTR": f"{high_performers['CTR（全部）'].mean():.2f}%",
+            "平均CPA": f"{high_performers['每次購買的成本'].mean():.0f}",
+        }
+    else:
+        avg_high_performer = {"說明": "目前沒有達標活動可供參考"}
+
+    # 整體平均數據
+    overall_avg = {
+        "平均ROAS": f"{all_campaigns_df['購買 ROAS（廣告投資報酬率）'].mean():.2f}",
+        "平均CTR": f"{all_campaigns_df['CTR（全部）'].mean():.2f}%",
+        "平均CPA": f"{all_campaigns_df['每次購買的成本'].mean():.0f}",
+    }
+
+    # RAG 增強：獲取歷史成功案例
+    rag_context = ""
+    if use_rag:
+        try:
+            rag = RAGService()
+            if rag.load_knowledge_base("ad_creatives"):
+                # 根據該廣告的受眾和問題類型搜尋相關成功案例
+                if not full_campaign_data.empty:
+                    full_data = full_campaign_data.iloc[0]
+                    audience = full_data.get('目標', '未知')
+                    age = full_data.get('年齡', '未知')
+                    gender = full_data.get('性別', '未知')
+
+                    # 構建搜尋查詢
+                    query = f"高 ROAS 廣告，受眾：{audience}，年齡：{age}，性別：{gender}"
+                else:
+                    query = "高 ROAS 廣告優化策略"
+
+                # 獲取相似案例
+                similar_ads = rag.search_similar_ads(query, k=3)
+
+                if similar_ads:
+                    rag_context = "\n\n## 📚 歷史成功案例參考\n\n"
+                    for i, doc in enumerate(similar_ads, 1):
+                        rag_context += f"### 案例 {i}（ROAS {doc.metadata.get('roas', 0):.2f}）\n"
+                        rag_context += f"{doc.page_content}\n\n"
+                    rag_context += "**請參考以上案例的成功要素，提供具體可行的優化建議。**\n"
+        except Exception as e:
+            # RAG 失敗時靜默處理，不影響主要分析
+            pass
+
+    # 建構 Prompt
+    prompt = f"""
+你是專業的 Meta 廣告投放顧問。請針對以下**單一廣告活動**進行深度分析。
+
+## 目標設定
+- 目標 ROAS: {target_roas}
+- 最大 CPA: ${max_cpa}
+
+## 待分析廣告活動
+{json.dumps(campaign_details, ensure_ascii=False, indent=2)}
+
+## 對比數據
+### 高表現活動平均（ROAS ≥ {target_roas}）
+{json.dumps(avg_high_performer, ensure_ascii=False, indent=2)}
+
+### 整體活動平均
+{json.dumps(overall_avg, ensure_ascii=False, indent=2)}{rag_context}
+
+## 請提供以下專屬分析：
+
+### 1. 🔍 根因診斷
+針對**這個廣告**，分析表現不佳的根本原因：
+- 對比高表現活動，找出關鍵差異
+- 檢查受眾、素材、品質評分
+- 判斷是哪個環節出問題（觸及→點擊→轉換）
+
+### 2. 💡 優化方案（3-5 個具體建議）
+針對**這個廣告**，提供可執行的優化建議：
+
+**每個建議請包含**：
+- 🎯 **優化項目**：要改什麼
+- 📋 **具體步驟**：怎麼改（3-5 個步驟）
+- 📊 **預期效果**：ROAS 預期提升幅度
+- ⏱️ **執行時間**：需要多久
+- 🚦 **優先級**：🔴 高 / 🟡 中 / 🟢 低
+
+### 3. ⚠️ 風險提示
+執行這些優化時要注意什麼？
+
+### 4. ⚡ 快速勝利
+找出 1 個可以**今天就執行且效果明顯**的優化動作。
+
+### 5. 📈 預期改善路徑
+如果按照建議執行，預期這個廣告的表現會如何改善？（列出階段性目標）
+
+請以清晰、專業、可執行的方式回答，使用繁體中文。
+重點是**針對這個廣告的專屬建議**，不要泛泛而談。
+"""
+
+    # 調用 LLM（使用 GPT-3.5 Turbo 以節省成本）
+    response = llm_service.generate_insights(
+        prompt,
+        model="gpt-3.5-turbo",
+        max_tokens=2000,  # 增加 token 數以獲得更詳細的分析
+        temperature=0.7
+    )
+
+    return response
+
+def display_ai_analysis(analysis_text, campaign_name):
+    """
+    顯示 AI 分析結果
+
+    Args:
+        analysis_text: AI 生成的分析文字
+        campaign_name: 廣告活動名稱
+    """
+    # 使用 expander 組織內容
+    with st.expander(f"📊 「{campaign_name}」完整 AI 分析報告", expanded=True):
+        st.markdown(analysis_text)
+
+    # 提供下載選項
+    col1, col2 = st.columns([3, 1])
+
+    with col2:
+        st.download_button(
+            label="📥 下載分析報告",
+            data=f"廣告活動：{campaign_name}\n生成時間：{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n\n{analysis_text}",
+            file_name=f"ai_analysis_{campaign_name}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.txt",
+            mime="text/plain"
+        )
+
+    # 提示後續動作
+    st.info("💡 **建議**：將分析報告下載後，與團隊討論執行計畫，並追蹤優化成效。")
+
+def generate_ai_urgent_analysis(df, urgent_recommendations, target_roas, max_cpa):
+    """
+    使用 AI 對緊急問題進行深度分析
+
+    Args:
+        df: 廣告數據 DataFrame
+        urgent_recommendations: 緊急建議列表
+        target_roas: 目標 ROAS
+        max_cpa: 最大 CPA
+
+    Returns:
+        AI 分析結果（Markdown 格式）
+    """
+    llm_service = get_llm_service()
+
+    if not llm_service.is_available():
+        return {"error": "AI 服務目前無法使用"}
+
+    # 準備緊急問題摘要
+    urgent_summary = []
+    for rec in urgent_recommendations:
+        urgent_summary.append({
+            "類型": rec['type'],
+            "標題": rec['title'],
+            "描述": rec['description'],
+            "緊急程度": rec['urgency']
+        })
+
+    # 取得問題廣告清單
+    problem_ads = df[
+        (df['購買 ROAS（廣告投資報酬率）'] < 1.0) |
+        (df['每次購買的成本'] > max_cpa)
+    ]
+
+    # 計算關鍵統計數據
+    total_problem_spend = problem_ads['花費金額 (TWD)'].sum()
+    total_spend = df['花費金額 (TWD)'].sum()
+    problem_spend_ratio = (total_problem_spend / total_spend * 100) if total_spend > 0 else 0
+
+    # 建構 Prompt
+    prompt = f"""
+你是專業的 Meta 廣告危機處理顧問。當前廣告帳戶出現緊急問題，需要立即處理。
+
+## 🔴 緊急問題概況
+{json.dumps(urgent_summary, ensure_ascii=False, indent=2)}
+
+## 📊 問題嚴重程度
+- 問題廣告數量：{len(problem_ads)} 個（佔總數 {len(problem_ads)/len(df)*100:.1f}%）
+- 問題廣告花費：${total_problem_spend:,.0f}（佔總花費 {problem_spend_ratio:.1f}%）
+- 整體平均 ROAS：{df['購買 ROAS（廣告投資報酬率）'].mean():.2f}（目標：{target_roas}）
+
+## 問題廣告詳情（花費最高的前 3 個）
+{problem_ads.nlargest(3, '花費金額 (TWD)')[['行銷活動名稱', '購買 ROAS（廣告投資報酬率）', '每次購買的成本', '花費金額 (TWD)']].to_dict('records') if not problem_ads.empty else '無'}
+
+## 請提供：
+
+### 1. ⚡ 立即行動方案（今天就要執行）
+針對最嚴重的問題，提供 1-3 個**今天**就必須執行的緊急措施：
+- 🎯 具體動作（例如：暫停哪些廣告）
+- 💰 預期挽回損失金額
+- ⏱️ 執行時間（以分鐘計）
+
+### 2. 🔍 根本原因診斷
+分析為什麼會出現這些緊急問題：
+- 是受眾問題？創意疲勞？競爭加劇？
+- 有沒有共同模式（例如：同一類受眾都表現不佳）
+
+### 3. 📋 優先處理順序
+將所有問題廣告按緊急程度排序，說明：
+- 哪些要立即暫停
+- 哪些要降低預算
+- 哪些可以嘗試優化
+
+### 4. 🛡️ 防範措施
+如何避免未來再次出現類似問題：
+- 監控哪些指標
+- 設定什麼警報
+- 多久檢視一次
+
+請以清晰、簡潔、可立即執行的方式回答。重點是**快速止血，減少損失**。
+使用繁體中文，使用 Markdown 格式，加上適當的 emoji。
+"""
+
+    # 調用 LLM
+    response = llm_service.generate_insights(
+        prompt,
+        model="gpt-4o-mini",
+        max_tokens=1500,
+        temperature=0.7
+    )
+
+    return response
+
+def generate_ai_performance_analysis(df, top_performers, underperformers, target_roas):
+    """
+    使用 AI 分析效能優化機會
+
+    Args:
+        df: 完整廣告數據 DataFrame
+        top_performers: 高表現活動 DataFrame
+        underperformers: 低效活動 DataFrame
+        target_roas: 目標 ROAS
+
+    Returns:
+        AI 分析結果（Markdown 格式）
+    """
+    llm_service = get_llm_service()
+
+    if not llm_service.is_available():
+        return {"error": "AI 服務目前無法使用"}
+
+    # 分析高表現活動的共同特徵
+    if not top_performers.empty:
+        top_features = {
+            "平均ROAS": f"{top_performers['購買 ROAS（廣告投資報酬率）'].mean():.2f}",
+            "平均CTR": f"{top_performers['CTR（全部）'].mean():.2f}%",
+            "平均CPA": f"${top_performers['每次購買的成本'].mean():.0f}",
+            "主要受眾": top_performers['目標'].value_counts().head(3).to_dict() if '目標' in top_performers.columns else {},
+            "主要活動類型": top_performers['行銷活動名稱'].head(3).tolist()
+        }
+    else:
+        top_features = {"說明": "沒有高表現活動"}
+
+    # 分析低效活動的共同問題
+    if not underperformers.empty:
+        low_features = {
+            "平均ROAS": f"{underperformers['購買 ROAS（廣告投資報酬率）'].mean():.2f}",
+            "平均CTR": f"{underperformers['CTR（全部）'].mean():.2f}%",
+            "平均CPA": f"${underperformers['每次購買的成本'].mean():.0f}",
+            "主要受眾": underperformers['目標'].value_counts().head(3).to_dict() if '目標' in underperformers.columns else {},
+            "問題活動數": len(underperformers)
+        }
+    else:
+        low_features = {"說明": "沒有低效活動"}
+
+    # 建構 Prompt
+    prompt = f"""
+你是專業的 Meta 廣告效能優化顧問。請分析以下數據，找出成功模式並複製到低效活動。
+
+## 📊 整體狀況
+- 總活動數：{len(df)}
+- 高表現活動：{len(top_performers)} 個（ROAS ≥ {target_roas}）
+- 低效活動：{len(underperformers)} 個
+- 整體平均 ROAS：{df['購買 ROAS（廣告投資報酬率）'].mean():.2f}
+
+## ✅ 高表現活動特徵
+{json.dumps(top_features, ensure_ascii=False, indent=2)}
+
+## ❌ 低效活動特徵
+{json.dumps(low_features, ensure_ascii=False, indent=2)}
+
+## 請提供：
+
+### 1. 🔍 成功模式分析
+高表現活動有哪些共同特徵？
+- 受眾特徵（年齡、性別、興趣）
+- 創意風格
+- 預算設定
+- 投放時機
+
+### 2. 📋 複製成功策略
+如何將成功模式應用到低效活動？
+提供 3-5 個具體可執行的優化方案：
+- 🎯 優化目標（例如：將受眾從A改為B）
+- 📝 執行步驟（1-2-3步驟）
+- 📈 預期提升（ROAS 從 X 提升到 Y）
+- ⏱️ 測試時長（需要跑多久才能看到效果）
+
+### 3. ⚠️ 避免的陷阱
+有哪些常見錯誤？
+- 哪些受眾不適合
+- 哪些創意風格效果不佳
+- 預算設定的盲點
+
+### 4. 🚀 快速勝利機會
+找出 1-2 個可以快速提升效能的方法（7天內見效）。
+
+請以清晰、具體、可執行的方式回答。
+使用繁體中文，使用 Markdown 格式，加上適當的 emoji。
+"""
+
+    # 調用 LLM
+    response = llm_service.generate_insights(
+        prompt,
+        model="gpt-4o-mini",
+        max_tokens=1500,
+        temperature=0.7
+    )
+
+    return response
+
+def generate_ai_budget_analysis(df, budget_recommendations, target_roas):
+    """
+    使用 AI 分析預算優化策略
+
+    Args:
+        df: 完整廣告數據 DataFrame
+        budget_recommendations: 預算調整建議列表
+        target_roas: 目標 ROAS
+
+    Returns:
+        AI 分析結果（Markdown 格式）
+    """
+    llm_service = get_llm_service()
+
+    if not llm_service.is_available():
+        return {"error": "AI 服務目前無法使用"}
+
+    # 準備預算調整摘要
+    total_budget = df['花費金額 (TWD)'].sum()
+    total_increase = sum([rec['調整金額'] for rec in budget_recommendations if rec['調整方向'] == '增加'])
+    total_decrease = sum([rec['調整金額'] for rec in budget_recommendations if rec['調整方向'] == '減少'])
+
+    # 分析歷史數據趨勢
+    high_roas_campaigns = df[df['購買 ROAS（廣告投資報酬率）'] >= target_roas]
+    low_roas_campaigns = df[df['購買 ROAS（廣告投資報酬率）'] < target_roas]
+
+    # 取得前3個建議增加預算的活動
+    increase_recommendations = [rec for rec in budget_recommendations if rec['調整方向'] == '增加'][:3]
+    decrease_recommendations = [rec for rec in budget_recommendations if rec['調整方向'] == '減少'][:3]
+
+    # 建構 Prompt
+    prompt = f"""
+你是專業的 Meta 廣告預算優化顧問。請分析以下預算分配數據，提供智能預算調整策略。
+
+## 📊 當前預算狀況
+- 總預算：${total_budget:,.0f}
+- 建議增加：${total_increase:,.0f}
+- 建議減少：${total_decrease:,.0f}
+- 淨變化：${total_increase - total_decrease:+,.0f}
+
+## 🎯 活動表現分布
+- 高表現活動（ROAS ≥ {target_roas}）：{len(high_roas_campaigns)} 個（總花費 ${high_roas_campaigns['花費金額 (TWD)'].sum():,.0f}）
+- 低表現活動（ROAS < {target_roas}）：{len(low_roas_campaigns)} 個（總花費 ${low_roas_campaigns['花費金額 (TWD)'].sum():,.0f}）
+
+## ⬆️ 建議增加預算的活動（Top 3）
+{json.dumps(increase_recommendations, ensure_ascii=False, indent=2) if increase_recommendations else '無'}
+
+## ⬇️ 建議減少預算的活動（Top 3）
+{json.dumps(decrease_recommendations, ensure_ascii=False, indent=2) if decrease_recommendations else '無'}
+
+## 請提供：
+
+### 1. 📈 預算優化策略
+基於歷史數據，提供預算重新分配方案：
+- **核心策略**：重點投資哪些活動？減少哪些？
+- **分配比例**：建議的預算分配百分比
+- **執行時機**：何時調整預算最佳？
+
+### 2. 🔮 預測與風險評估
+針對建議的預算調整：
+- **預期 ROAS 變化**：
+  - 增加預算後，ROAS 會如何變化？（考慮受眾飽和）
+  - 減少預算後，會損失多少轉換？
+- **風險因素**：
+  - 受眾飽和風險（增加預算可能導致 ROAS 下降）
+  - 競爭加劇風險
+  - 季節性影響
+- **信心區間**：預測的可信度（高/中/低）
+
+### 3. 💡 分階段執行計畫
+不要一次調整太多，提供漸進式方案：
+
+**第1階段（立即執行）**：
+- 調整哪些活動
+- 調整幅度（建議先調整 20-30%）
+- 觀察期（3-5天）
+- 成功指標（ROAS 維持在 X 以上）
+
+**第2階段（若第1階段成功）**：
+- 進一步調整方案
+- 擴大調整幅度
+- 新增測試活動
+
+**第3階段（優化穩定後）**：
+- 持續優化建議
+- 新受眾測試
+
+### 4. ⚠️ 注意事項
+- 哪些活動不建議大幅調整預算？為什麼？
+- 調整預算後需要監控哪些指標？
+- 多久重新評估一次？
+
+請以清晰、具體、可執行的方式回答。重點是**避免盲目加預算導致 ROAS 下降**。
+使用繁體中文，使用 Markdown 格式，加上適當的 emoji。
+"""
+
+    # 調用 LLM
+    response = llm_service.generate_insights(
+        prompt,
+        model="gpt-4o-mini",
+        max_tokens=2000,
+        temperature=0.7
+    )
+
+    return response
 
 if __name__ == "__main__":
     show_optimization_recommendations()

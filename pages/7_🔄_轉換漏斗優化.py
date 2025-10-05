@@ -11,6 +11,14 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from utils.data_loader import load_meta_ads_data
+from utils.ad_display import (
+    display_top_bottom_ads,
+    get_sorted_ad_options,
+    format_ad_display_name,
+    display_ad_performance_table,
+    get_ad_details_for_analysis
+)
+from utils.llm_service import LLMService
 
 def show_funnel_optimization():
     """顯示轉換漏斗優化頁面"""
@@ -109,6 +117,110 @@ def show_funnel_optimization():
 共 {len(high_loss_stages)} 個階段需要重點優化：
 {', '.join(high_loss_stages['階段'].tolist())}
             """)
+
+        # AI 深度瓶頸分析
+        st.markdown("### 🤖 AI 深度瓶頸分析")
+
+        if st.button("🔍 使用 AI 分析漏斗瓶頸", key="funnel_ai_analysis"):
+            with st.spinner("AI 正在深度分析轉換漏斗瓶頸..."):
+                try:
+                    # 初始化 LLM 服務
+                    llm_service = LLMService()
+
+                    # 準備漏斗數據
+                    funnel_data = funnel_df.to_dict('records')
+
+                    # 構建 Prompt
+                    prompt = f"""
+你是專業的 Meta 廣告轉換漏斗優化顧問。請針對以下漏斗數據進行深度瓶頸分析。
+
+## 📊 漏斗階段數據
+{pd.DataFrame(funnel_data).to_string()}
+
+## 🔴 關鍵指標
+- **最大流失點**：{max_loss_stage}（流失率 {max_loss_rate:.2f}%）
+- **整體轉換率**：{funnel_df['數量'].iloc[-1] / funnel_df['數量'].iloc[0] * 100:.2f}%
+- **總觸及人數**：{funnel_df['數量'].iloc[0]:,.0f}
+- **最終購買人數**：{funnel_df['數量'].iloc[-1]:,.0f}
+
+## 請提供：
+
+### 1. 🔍 最嚴重瓶頸分析
+針對「{max_loss_stage}」階段（流失率 {max_loss_rate:.2f}%），分析：
+- **可能原因**（3-5 個具體假設）
+  - 用戶在這階段遇到什麼障礙？
+  - 是技術問題、體驗問題、還是心理因素？
+- **證據支持**
+  - 從其他指標推斷（例如：如果點擊後流失，可能是落地頁問題）
+
+### 2. 💡 優化方案（優先級排序）
+針對每個瓶頸，提供具體可執行的方案：
+
+**方案 1（高優先級）**：
+- 🎯 **優化目標**：要改善什麼
+- 📝 **執行步驟**：
+  1. 第一步
+  2. 第二步
+  3. 第三步
+- 📈 **預期改善**：流失率從 X% 降到 Y%
+- ⏱️ **所需時間**：X 天
+- 💰 **成本估算**：低/中/高
+
+**方案 2（中優先級）**：...
+
+**方案 3（快速勝利）**：...
+
+### 3. 🧪 A/B 測試方案
+提供 2-3 個可立即執行的測試：
+- **測試假設**：我們認為 X 會改善 Y
+- **A/B 組設定**：
+  - A 組（對照組）：現狀
+  - B 組（實驗組）：改變什麼
+- **成功指標**：觀察哪個指標
+- **測試時長**：需要跑幾天
+- **最小樣本數**：至少需要多少流量
+
+### 4. 🎯 其他高流失階段
+除了最嚴重的瓶頸，還有哪些階段需要注意？簡要說明優化方向。
+
+請以清晰、具體、可立即執行的方式回答。
+使用繁體中文，使用 Markdown 格式，加上適當的 emoji。
+"""
+
+                    # 調用 LLM
+                    analysis = llm_service.generate_insights(
+                        prompt=prompt,
+                        model="gpt-3.5-turbo",
+                        max_tokens=1500,
+                        temperature=0.7
+                    )
+
+                    # 顯示分析結果
+                    st.success("✅ AI 分析完成")
+                    st.markdown(analysis)
+
+                    # 額外建議
+                    st.info("""
+💡 **使用建議**：
+1. 優先執行「具體優化方案」中的第一項（通常是 ROI 最高的）
+2. 設定測試週期（建議 7-14 天）
+3. 使用「A/B 測試建議」驗證效果
+4. 持續監控關鍵指標變化
+                    """)
+
+                except Exception as e:
+                    st.error(f"""
+**❌ AI 分析失敗**
+
+錯誤訊息：{str(e)}
+
+可能原因：
+- OpenAI API Key 未設定或無效
+- API 配額不足
+- 網路連線問題
+
+請檢查 .env 檔案中的 OPENAI_API_KEY 設定。
+                    """)
 
     # 瀑布圖顯示流失
     st.markdown("### 💧 流失瀑布圖")
@@ -539,7 +651,213 @@ def show_funnel_optimization():
 
     st.markdown("---")
 
-    # ========== 第五部分：總結 ==========
+    # ========== 第五部分：查看特定廣告的漏斗表現 ==========
+    st.markdown("## 🔍 查看特定廣告的漏斗表現")
+
+    st.markdown("""
+    選擇廣告查看其在整個轉換漏斗中的詳細表現，了解哪個環節需要優化。
+    """)
+
+    # 添加廣告階層顯示
+    df['廣告階層'] = df.apply(format_ad_display_name, axis=1)
+
+    # 計算每個廣告的漏斗轉換率
+    df['點擊率'] = (df['連結點擊次數'] / df['觸及人數'] * 100) if '連結點擊次數' in df.columns and '觸及人數' in df.columns else 0
+    df['加購率'] = (df['加到購物車次數'] / df['觸及人數'] * 100) if '加到購物車次數' in df.columns and '觸及人數' in df.columns else 0
+    df['結帳率'] = (df['開始結帳次數'] / df['觸及人數'] * 100) if '開始結帳次數' in df.columns and '觸及人數' in df.columns else 0
+    df['購買率'] = (df['購買次數'] / df['觸及人數'] * 100) if '購買次數' in df.columns and '觸及人數' in df.columns else 0
+
+    # Top/Bottom 漏斗表現對比
+    st.markdown("### 📊 漏斗表現對比：Top 10 vs Bottom 10")
+
+    if '購買率' in df.columns:
+        display_top_bottom_ads(
+            df,
+            metric='購買率',
+            top_n=10
+        )
+
+    # 讓用戶選擇廣告查看詳細漏斗分析
+    st.markdown("### 🔍 選擇廣告查看詳細漏斗分析")
+
+    # 使用 get_sorted_ad_options 生成選項（按購買率排序）
+    option_labels, data_map = get_sorted_ad_options(
+        df,
+        sort_by='custom',
+        custom_sort_columns=['購買率', '花費金額 (TWD)'],
+        custom_sort_ascending=[False, False],
+        top_n=50
+    )
+
+    selected_ad = st.selectbox(
+        "選擇要分析的廣告",
+        options=option_labels,
+        help="已按「購買率」和「花費金額」排序"
+    )
+
+    if selected_ad:
+        ad_data = data_map[selected_ad]
+
+        # 顯示廣告基本資訊
+        st.markdown(f"#### {ad_data.get('廣告階層', '未知')}")
+
+        # 計算該廣告的漏斗數據
+        funnel_metrics = {
+            '觸及人數': ad_data.get('觸及人數', 0),
+            '點擊次數': ad_data.get('連結點擊次數', 0),
+            '加購次數': ad_data.get('加到購物車次數', 0),
+            '結帳次數': ad_data.get('開始結帳次數', 0),
+            '購買次數': ad_data.get('購買次數', 0)
+        }
+
+        # 移除值為 0 的階段
+        funnel_metrics = {k: v for k, v in funnel_metrics.items() if v > 0}
+
+        # 計算轉換率
+        base_reach = ad_data.get('觸及人數', 0)
+        conversion_rates = {}
+        if base_reach > 0:
+            for key, value in funnel_metrics.items():
+                conversion_rates[key] = (value / base_reach * 100) if base_reach > 0 else 0
+
+        # 顯示漏斗指標
+        col1, col2, col3, col4, col5 = st.columns(5)
+
+        with col1:
+            st.metric("觸及人數", f"{funnel_metrics.get('觸及人數', 0):,.0f}")
+
+        with col2:
+            clicks = funnel_metrics.get('點擊次數', 0)
+            click_rate = conversion_rates.get('點擊次數', 0)
+            st.metric(
+                "點擊次數",
+                f"{clicks:,.0f}",
+                delta=f"{click_rate:.2f}% 轉換率"
+            )
+
+        with col3:
+            add_cart = funnel_metrics.get('加購次數', 0)
+            add_cart_rate = conversion_rates.get('加購次數', 0)
+            st.metric(
+                "加購次數",
+                f"{add_cart:,.0f}",
+                delta=f"{add_cart_rate:.2f}% 轉換率"
+            )
+
+        with col4:
+            checkout = funnel_metrics.get('結帳次數', 0)
+            checkout_rate = conversion_rates.get('結帳次數', 0)
+            st.metric(
+                "結帳次數",
+                f"{checkout:,.0f}",
+                delta=f"{checkout_rate:.2f}% 轉換率"
+            )
+
+        with col5:
+            purchases = funnel_metrics.get('購買次數', 0)
+            purchase_rate = conversion_rates.get('購買次數', 0)
+            st.metric(
+                "購買次數",
+                f"{purchases:,.0f}",
+                delta=f"{purchase_rate:.2f}% 轉換率"
+            )
+
+        # 顯示該廣告的漏斗圖
+        if len(funnel_metrics) > 1:
+            ad_funnel_df = pd.DataFrame(list(funnel_metrics.items()), columns=['階段', '數量'])
+            ad_funnel_df['流失數量'] = ad_funnel_df['數量'].diff(-1).fillna(0).abs()
+            ad_funnel_df['流失率'] = (ad_funnel_df['流失數量'] / ad_funnel_df['數量'] * 100).round(2)
+
+            fig_ad_funnel = go.Figure(go.Funnel(
+                y=ad_funnel_df['階段'],
+                x=ad_funnel_df['數量'],
+                textposition="inside",
+                textinfo="value+percent initial",
+                marker=dict(
+                    color=['#2ecc71', '#3498db', '#9b59b6', '#e67e22', '#d35400'][:len(ad_funnel_df)]
+                )
+            ))
+
+            fig_ad_funnel.update_layout(
+                title=f"廣告轉換漏斗",
+                height=400
+            )
+
+            st.plotly_chart(fig_ad_funnel, use_container_width=True)
+
+            # 流失分析表格
+            st.markdown("#### 各階段流失分析")
+
+            st.dataframe(
+                ad_funnel_df,
+                use_container_width=True,
+                column_config={
+                    "階段": "轉換階段",
+                    "數量": st.column_config.NumberColumn("數量", format="%d"),
+                    "流失數量": st.column_config.NumberColumn("流失數", format="%d"),
+                    "流失率": st.column_config.NumberColumn("流失率 (%)", format="%.2f%%")
+                },
+                hide_index=True
+            )
+
+        # 漏斗優化建議
+        st.markdown("#### 💡 漏斗優化建議")
+
+        click_rate_val = ad_data.get('點擊率', 0)
+        purchase_rate_val = ad_data.get('購買率', 0)
+        roas = ad_data.get('購買 ROAS（廣告投資報酬率）', 0)
+
+        if purchase_rate_val < 1.0:
+            st.warning(f"""
+**⚠️ 整體購買轉換率低（{purchase_rate_val:.2f}%）**
+
+**問題診斷**：
+- 從觸及到購買的轉換率過低
+- 可能在多個環節都有流失
+
+**建議行動**：
+1. **檢查點擊階段**：CTR = {click_rate_val:.2f}%，如果低於 2%，需優化廣告素材
+2. **檢查加購階段**：如果加購率低，可能是產品頁不吸引人或價格問題
+3. **檢查結帳階段**：如果結帳流失率高，需簡化結帳流程
+
+**預期改善**：優化關鍵流失點，購買率可提升至 2-3%
+            """)
+
+        elif purchase_rate_val >= 3.0:
+            st.success(f"""
+**🏆 優秀的漏斗表現（購買率 {purchase_rate_val:.2f}%）**
+
+這個廣告在漏斗轉換上表現優異！
+
+**成功要素值得學習**：
+- 點擊率：{click_rate_val:.2f}%
+- ROAS：{roas:.2f}
+- 受眾：{ad_data.get('年齡', '未知')} / {ad_data.get('性別', '未知')}
+- Headline：{ad_data.get('headline', '未知')}
+
+**建議**：
+1. 複製這個廣告的成功模式到其他廣告
+2. 擴大預算，獲取更多轉換
+3. 測試類似受眾組合
+            """)
+
+        else:
+            st.info(f"""
+**📊 中等漏斗表現（購買率 {purchase_rate_val:.2f}%）**
+
+表現尚可，但仍有優化空間。
+
+**改善方向**：
+1. 分析流失率最高的環節
+2. 參考高購買率廣告（>3%）的特徵
+3. A/B 測試不同素材、文案、受眾
+
+**目標**：購買率提升至 3% 以上
+            """)
+
+    st.markdown("---")
+
+    # ========== 第六部分：總結 ==========
     st.markdown("## 📊 漏斗優化總結")
 
     summary_col1, summary_col2, summary_col3 = st.columns(3)

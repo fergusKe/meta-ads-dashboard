@@ -11,6 +11,11 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from utils.data_loader import load_meta_ads_data
+from utils.ad_display import (
+    display_top_bottom_ads,
+    get_sorted_ad_options,
+    format_ad_display_name
+)
 
 def show_audience_insights():
     """顯示受眾洞察頁面 - 升級版"""
@@ -516,6 +521,149 @@ def show_audience_insights():
         - 建議優化：Landing Page、產品價格、促銷優惠
         - 可嘗試：重新定向廣告、購物車放棄提醒
         """)
+
+    st.markdown("---")
+
+    # ========== 新增部分：查看特定受眾的廣告表現 ==========
+    st.markdown("## 🔍 查看特定受眾的廣告表現")
+
+    st.markdown("""
+    選擇受眾組合，查看該受眾下哪些廣告表現最好。幫助您了解成功素材與文案。
+    """)
+
+    # 添加廣告階層顯示
+    df['廣告階層'] = df.apply(format_ad_display_name, axis=1)
+
+    # 選擇受眾
+    col1, col2 = st.columns(2)
+
+    with col1:
+        selected_age = st.selectbox(
+            "選擇年齡層",
+            options=['全部'] + sorted(df['年齡'].unique().tolist()),
+            index=0
+        )
+
+    with col2:
+        selected_gender = st.selectbox(
+            "選擇性別",
+            options=['全部'] + sorted(df['性別'].unique().tolist()),
+            index=0
+        )
+
+    # 篩選數據
+    audience_df = df.copy()
+    if selected_age != '全部':
+        audience_df = audience_df[audience_df['年齡'] == selected_age]
+    if selected_gender != '全部':
+        audience_df = audience_df[audience_df['性別'] == selected_gender]
+
+    if not audience_df.empty:
+        # 顯示受眾摘要
+        st.markdown(f"### 📊 受眾摘要：{selected_age} / {selected_gender}")
+
+        summary_col1, summary_col2, summary_col3, summary_col4 = st.columns(4)
+
+        with summary_col1:
+            st.metric("廣告數", f"{len(audience_df)} 個")
+
+        with summary_col2:
+            avg_roas = audience_df['購買 ROAS（廣告投資報酬率）'].mean()
+            st.metric("平均 ROAS", f"{avg_roas:.2f}")
+
+        with summary_col3:
+            total_spend = audience_df['花費金額 (TWD)'].sum()
+            st.metric("總花費", f"${total_spend:,.0f}")
+
+        with summary_col4:
+            total_purchases = audience_df['購買次數'].sum()
+            st.metric("總購買", f"{total_purchases:.0f}")
+
+        # 顯示 Top/Bottom 廣告
+        st.markdown("### 🎯 該受眾的廣告表現對比")
+
+        display_top_bottom_ads(
+            audience_df,
+            metric='購買 ROAS（廣告投資報酬率）',
+            top_n=5
+        )
+
+        # 成功素材分析
+        st.markdown("### ✨ 成功素材特徵")
+
+        top_ads = audience_df.nlargest(5, '購買 ROAS（廣告投資報酬率）')
+
+        if not top_ads.empty:
+            # 顯示成功廣告的共同特徵
+            col1, col2 = st.columns(2)
+
+            with col1:
+                st.success(f"""
+**🏆 Top 5 廣告特徵**
+
+- 平均 ROAS：{top_ads['購買 ROAS（廣告投資報酬率）'].mean():.2f}
+- 平均 CTR：{top_ads['CTR（全部）'].mean():.2f}%
+- 平均 CPA：${top_ads['每次購買的成本'].mean():.0f}
+- 總購買：{top_ads['購買次數'].sum():.0f} 次
+                """)
+
+                # 最常見的 CTA
+                if 'call_to_action_type' in top_ads.columns:
+                    top_cta = top_ads['call_to_action_type'].mode()
+                    if not top_cta.empty:
+                        st.markdown(f"**最常見 CTA**：`{top_cta.values[0]}`")
+
+            with col2:
+                # 顯示 Top 1 廣告的詳細資訊
+                best_ad = top_ads.iloc[0]
+
+                st.info(f"""
+**📌 表現最佳廣告**
+
+- 廣告：{best_ad.get('廣告階層', '未知')}
+- ROAS：{best_ad.get('購買 ROAS（廣告投資報酬率）', 0):.2f}
+- 花費：${best_ad.get('花費金額 (TWD)', 0):,.0f}
+- 購買：{best_ad.get('購買次數', 0):.0f} 次
+
+**Headline**：{best_ad.get('headline', '未知')}
+                """)
+
+        # 針對該受眾的優化建議
+        st.markdown("### 💡 針對該受眾的優化建議")
+
+        if avg_roas >= 3.0:
+            st.success(f"""
+**🎉 這是高效受眾（ROAS {avg_roas:.2f}）**
+
+**建議行動**：
+1. ✅ 增加預算，擴大觸及
+2. ✅ 複製 Top 5 廣告的素材風格
+3. ✅ 測試類似受眾（Lookalike Audience）
+4. ✅ 開發更多針對此受眾的廣告
+            """)
+        elif avg_roas < 1.5:
+            st.warning(f"""
+**⚠️ 這是低效受眾（ROAS {avg_roas:.2f}）**
+
+**建議行動**：
+1. 🔍 分析為何轉換率低
+2. ⚠️ 考慮暫停或降低預算
+3. 💡 優化素材，測試不同訴求點
+4. 🎯 重新定義受眾條件
+            """)
+        else:
+            st.info(f"""
+**📊 中等表現受眾（ROAS {avg_roas:.2f}）**
+
+**建議行動**：
+1. 📈 分析 Top 廣告的成功要素
+2. 🧪 A/B 測試不同素材
+3. 🎯 優化出價策略
+4. 💰 適度調整預算
+            """)
+
+    else:
+        st.warning("所選受眾組合沒有數據")
 
 if __name__ == "__main__":
     show_audience_insights()
