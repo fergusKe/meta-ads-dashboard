@@ -1,3 +1,7 @@
+# Environment variables (contains secrets)
+.env
+
+# Data files
 data
 
 # Python-generated files
