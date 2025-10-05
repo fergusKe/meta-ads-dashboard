@@ -1,7 +1,13 @@
-import streamlit as st
-import pandas as pd
-from dotenv import load_dotenv
 import os
+from dataclasses import dataclass
+from typing import Callable, Optional
+
+import pandas as pd
+import streamlit as st
+from dotenv import load_dotenv
+from importlib import import_module
+
+from utils.data_loader import load_meta_ads_data
 
 # 載入環境變數
 load_dotenv()
@@ -71,6 +77,80 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
+
+@dataclass(frozen=True)
+class PageConfig:
+    label: str
+    module: Optional[str]
+    callable: str
+    flag: Optional[str] = None
+
+
+PAGE_DEFINITIONS: list[PageConfig] = [
+    PageConfig("🏠 首頁概覽", None, "show_homepage"),
+    PageConfig("📊 整體效能儀表板", "pages.1_📊_整體效能儀表板", "show_performance_dashboard"),
+    PageConfig("🎯 活動分析", "pages.2_🎯_活動分析", "show_campaign_analysis"),
+    PageConfig("👥 受眾洞察", "pages.3_👥_受眾洞察", "show_audience_insights"),
+    PageConfig("💰 ROI 分析", "pages.4_💰_ROI分析", "show_roi_analysis"),
+    PageConfig("🎨 素材成效分析", "pages.5_🎨_素材成效分析", "show_creative_analysis"),
+    PageConfig("📈 廣告品質評分", "pages.6_📈_廣告品質評分", "show_quality_score_analysis"),
+    PageConfig("🔄 轉換漏斗優化", "pages.7_🔄_轉換漏斗優化", "show_funnel_optimization"),
+    PageConfig("📋 詳細數據表格", "pages.8_📋_詳細數據表格", "show_detailed_data_table"),
+    PageConfig("📈 趨勢分析", "pages.09_📈_趨勢分析", "show_trend_analysis"),
+    PageConfig("⚡ 即時優化建議", "pages.10_⚡_即時優化建議", "show_optimization_recommendations", "ENABLE_PERFORMANCE_PREDICTION"),
+    PageConfig("🤖 AI 素材製作首頁", "pages.11_🤖_AI素材製作首頁", "show_ai_creative_hub", "ENABLE_AI_IMAGE_GENERATION"),
+    PageConfig("✍️ AI 文案生成", "pages.12_✍️_AI文案生成", "main", "ENABLE_AI_COPYWRITING"),
+    PageConfig("🎨 AI 圖片生成", "pages.13_🎨_AI圖片生成", "main", "ENABLE_AI_IMAGE_GENERATION"),
+    PageConfig("🧠 智能素材優化", "pages.14_🧠_智能素材優化", "main", "ENABLE_AI_IMAGE_GENERATION"),
+    PageConfig("🎯 智能投放策略", "pages.15_🎯_智能投放策略", "main", "ENABLE_PERFORMANCE_PREDICTION"),
+]
+
+
+def _env_flag(name: str, default: bool = True) -> bool:
+    value = os.getenv(name)
+    if value is None:
+        return default
+    return value.strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _is_page_enabled(config: PageConfig) -> bool:
+    return config.flag is None or _env_flag(config.flag)
+
+
+def _get_page_config(label: str) -> Optional[PageConfig]:
+    for config in PAGE_DEFINITIONS:
+        if config.label == label and _is_page_enabled(config):
+            return config
+    return None
+
+
+def _load_page_view(config: PageConfig) -> Callable[[], None]:
+    module_path = config.module
+    callable_name = config.callable
+
+    if callable_name is None:
+        raise RuntimeError("頁面缺少可呼叫的處理函式設定")
+
+    if module_path:
+        try:
+            module = import_module(module_path)
+        except ImportError as exc:
+            raise RuntimeError(f"無法載入模組：{module_path} ({exc})") from exc
+
+        try:
+            view = getattr(module, callable_name)
+        except AttributeError as exc:
+            raise RuntimeError(f"模組缺少處理函式：{callable_name}") from exc
+    else:
+        view = globals().get(callable_name)
+        if view is None:
+            raise RuntimeError(f"找不到函式：{callable_name}")
+
+    if not callable(view):
+        raise RuntimeError("頁面處理函式不可呼叫")
+
+    return view
+
 def main():
     # 側邊欄導航
     with st.sidebar:
@@ -83,25 +163,13 @@ def main():
         else:
             target_page = None
 
-        # 統一的頁面選擇
-        page_options = [
-            "🏠 首頁概覽",
-            "📊 整體效能儀表板",
-            "🎯 活動分析",
-            "👥 受眾洞察",
-            "💰 ROI 分析",
-            "🎨 素材成效分析",  # NEW
-            "📈 廣告品質評分",  # NEW
-            "🔄 轉換漏斗優化",  # NEW
-            "📋 詳細數據表格",  # NEW (升級版)
-            "📈 趨勢分析",
-            "⚡ 即時優化建議",
-            "🤖 AI 素材製作首頁",
-            "✍️ AI 文案生成",
-            "🎨 AI 圖片生成",
-            "🧠 智能素材優化",
-            "🎯 智能投放策略"
-        ]
+        # 統一的頁面選擇（依據環境旗標篩選）
+        available_configs = [config for config in PAGE_DEFINITIONS if _is_page_enabled(config)]
+        page_options = [config.label for config in available_configs]
+
+        if not page_options:
+            st.error("❌ 所有功能頁面皆被停用，請檢查環境旗標設定。")
+            st.stop()
 
         # 如果有導航指令，設定對應的索引
         default_index = 0
@@ -123,98 +191,29 @@ def main():
 
         st.info("💡 數據更新時間：每小時")
 
-    # 根據選擇顯示對應頁面
-    if page == "🏠 首頁概覽":
-        show_homepage()
-    elif page == "📊 整體效能儀表板":
-        import importlib
-        show_performance_dashboard = importlib.import_module('pages.1_📊_整體效能儀表板').show_performance_dashboard
-        show_performance_dashboard()
-    elif page == "🎯 活動分析":
-        import importlib
-        show_campaign_analysis = importlib.import_module('pages.2_🎯_活動分析').show_campaign_analysis
-        show_campaign_analysis()
-    elif page == "👥 受眾洞察":
-        import importlib
-        show_audience_insights = importlib.import_module('pages.3_👥_受眾洞察').show_audience_insights
-        show_audience_insights()
-    elif page == "💰 ROI 分析":
-        import importlib
-        show_roi_analysis = importlib.import_module('pages.4_💰_ROI分析').show_roi_analysis
-        show_roi_analysis()
-    elif page == "🎨 素材成效分析":
-        import importlib
-        show_creative_analysis = importlib.import_module('pages.5_🎨_素材成效分析').show_creative_analysis
-        show_creative_analysis()
-    elif page == "📈 廣告品質評分":
-        import importlib
-        show_quality_score_analysis = importlib.import_module('pages.6_📈_廣告品質評分').show_quality_score_analysis
-        show_quality_score_analysis()
-    elif page == "🔄 轉換漏斗優化":
-        import importlib
-        show_funnel_optimization = importlib.import_module('pages.7_🔄_轉換漏斗優化').show_funnel_optimization
-        show_funnel_optimization()
-    elif page == "📋 詳細數據表格":
-        import importlib
-        show_detailed_data_table = importlib.import_module('pages.8_📋_詳細數據表格').show_detailed_data_table
-        show_detailed_data_table()
-    elif page == "📈 趨勢分析":
-        import importlib
-        show_trend_analysis = importlib.import_module('pages.09_📈_趨勢分析').show_trend_analysis
-        show_trend_analysis()
-    elif page == "⚡ 即時優化建議":
-        import importlib
-        show_optimization_recommendations = importlib.import_module('pages.10_⚡_即時優化建議').show_optimization_recommendations
-        show_optimization_recommendations()
-    elif page == "🤖 AI 素材製作首頁":
-        import importlib
-        show_ai_creative_hub = importlib.import_module('pages.11_🤖_AI素材製作首頁').show_ai_creative_hub
-        show_ai_creative_hub()
-    elif page == "✍️ AI 文案生成":
-        import importlib
-        show_ai_copywriting = importlib.import_module('pages.12_✍️_AI文案生成').main
-        show_ai_copywriting()
-    elif page == "🎨 AI 圖片生成":
-        import importlib
-        show_ai_image_generation = importlib.import_module('pages.13_🎨_AI圖片生成').main
-        show_ai_image_generation()
-    elif page == "🧠 智能素材優化":
-        import importlib
-        show_smart_creative_optimization = importlib.import_module('pages.14_🧠_智能素材優化').main
-        show_smart_creative_optimization()
-    elif page == "🎯 智能投放策略":
-        import importlib
-        show_smart_strategy = importlib.import_module('pages.15_🎯_智能投放策略').main
-        show_smart_strategy()
+    page_config = _get_page_config(page)
+    if not page_config:
+        st.error(f"❌ 找不到頁面設定：{page}")
+        st.stop()
 
-@st.cache_data
-def load_data():
-    """載入並快取 Meta 廣告數據"""
     try:
-        data_file = os.getenv('DATA_FILE_PATH', '耘初茶食.xlsx')
-        df = pd.read_excel(data_file)
+        page_view = _load_page_view(page_config)
+    except RuntimeError as exc:
+        st.error(f"❌ 無法載入「{page}」頁面：{exc}")
+        st.stop()
 
-        # 基本數據清理
-        date_columns = ['開始', '結束時間', '分析報告開始', '分析報告結束']
-        for col in date_columns:
-            if col in df.columns:
-                df[col] = pd.to_datetime(df[col], errors='coerce')
-
-        # 填充數值型欄位的缺失值
-        numeric_columns = df.select_dtypes(include=['number']).columns
-        df[numeric_columns] = df[numeric_columns].fillna(0)
-
-        return df
-    except Exception as e:
-        st.error(f"❌ 數據載入失敗：{e}")
-        return None
+    try:
+        page_view()
+    except Exception as exc:  # pragma: no cover - streamlit runtime handling
+        st.error(f"❌ 顯示「{page}」時發生未預期錯誤。")
+        st.exception(exc)
 
 def show_homepage():
     """顯示首頁概覽"""
     st.markdown('<h1 class="main-header">🏠 耘初茶食 Meta 廣告效能概覽</h1>', unsafe_allow_html=True)
 
     # 載入數據
-    df = load_data()
+    df = load_meta_ads_data()
     if df is None:
         st.error("無法載入數據，請檢查數據檔案。")
         return

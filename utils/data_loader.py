@@ -1,37 +1,58 @@
+import os
+from datetime import datetime
+from pathlib import Path
+
 import pandas as pd
 import streamlit as st
-from datetime import datetime
-import os
+from dotenv import load_dotenv
 
-@st.cache_data
-def load_meta_ads_data(file_path="耘初茶食.xlsx"):
-    """
-    載入並預處理 Meta 廣告數據
+
+DEFAULT_DATA_FILE = "耘初茶食.xlsx"
+
+# 確保在匯入時就載入 .env 參數，便於 CLI 腳本與 Streamlit 共用
+load_dotenv()
+
+
+def _resolve_data_path(file_path: str | None) -> Path:
+    """根據參數與環境變數取得實際資料路徑"""
+    candidate = file_path or os.getenv("DATA_FILE_PATH") or DEFAULT_DATA_FILE
+    return Path(candidate).expanduser()
+
+
+@st.cache_data(show_spinner=False)
+def _load_and_preprocess_data(resolved_path: str) -> pd.DataFrame:
+    """載入 Excel 並套用預處理（供 Streamlit 快取使用）"""
+    df = pd.read_excel(resolved_path)
+    return preprocess_data(df)
+
+
+def load_meta_ads_data(file_path: str | None = None, show_sidebar_info: bool = True) -> pd.DataFrame | None:
+    """載入並預處理 Meta 廣告數據，供各頁面共用
 
     Args:
-        file_path (str): Excel 檔案路徑
+        file_path: 指定資料路徑，未提供則依序取環境變數與預設檔名
+        show_sidebar_info: 是否於側欄顯示資料來源與筆數
 
     Returns:
-        pd.DataFrame: 處理後的數據框架
+        預處理後的數據框架，若載入失敗則回傳 None
     """
+    resolved_path = _resolve_data_path(file_path)
+
     try:
-        # 載入 Excel 檔案
-        df = pd.read_excel(file_path)
-
-        # 基本資訊顯示
-        st.sidebar.success(f"✅ 數據載入成功：{len(df)} 筆記錄")
-
-        # 數據預處理
-        df = preprocess_data(df)
-
-        return df
-
+        df = _load_and_preprocess_data(str(resolved_path))
     except FileNotFoundError:
-        st.error(f"❌ 找不到檔案：{file_path}")
+        st.error(f"❌ 找不到檔案：{resolved_path}")
         return None
-    except Exception as e:
-        st.error(f"❌ 數據載入失敗：{str(e)}")
+    except Exception as exc:
+        st.error(f"❌ 數據載入失敗：{exc}")
         return None
+
+    if show_sidebar_info:
+        st.sidebar.success(f"✅ 數據載入成功：{len(df)} 筆記錄")
+        display_path = resolved_path.resolve().as_posix() if resolved_path.exists() else resolved_path.as_posix()
+        st.sidebar.caption(f"📂 數據來源：{display_path}")
+
+    return df
 
 def preprocess_data(df):
     """

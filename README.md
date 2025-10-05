@@ -17,10 +17,35 @@ uv run streamlit run app.py
 訪問 **http://localhost:8502** 開始使用
 
 ### 2. 設定 OpenAI API Key
+先複製環境範本並填入設定：
+```bash
+cp .env.example .env
+```
+
 在 `.env` 檔案中設定：
 ```
 OPENAI_API_KEY=your-key-here
 ```
+
+可選進階設定（未指定時將使用預設值）：
+```
+# 指定要呼叫的 OpenAI 模型
+OPENAI_MODEL=gpt-4o-mini
+
+# LLM 回應快取秒數（降低成本與延遲）
+CACHE_TTL=3600
+```
+
+功能開關（可依部署需求隱藏對應頁面）：
+- `ENABLE_AI_COPYWRITING=true`：顯示「✍️ AI 文案生成」功能
+- `ENABLE_AI_IMAGE_GENERATION=true`：顯示「🤖 AI 素材製作首頁」「🎨 AI 圖片生成」「🧠 智能素材優化」
+- `ENABLE_PERFORMANCE_PREDICTION=true`：顯示「⚡ 即時優化建議」「🎯 智能投放策略」
+
+常見錯誤排查：
+- `⚠️ 尚未設定 OPENAI_API_KEY` → 請在 `.env` 中填入有效金鑰
+- `❌ API 金鑰無效或未授權` → 檢查金鑰是否正確或已過期
+- `⚠️ API 配額不足` → 至 OpenAI 後台確認帳戶用量或升級方案
+- `⚠️ 無法連線至 OpenAI` → 稍後重試或檢查網路連線
 
 ### 3. 建立 RAG 知識庫（必須）
 1. 前往「🧠 RAG 知識庫管理」頁面

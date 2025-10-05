@@ -8,7 +8,9 @@ import json
 import hashlib
 from datetime import datetime, timedelta
 from typing import Optional, Dict, Any
+
 import streamlit as st
+from dotenv import load_dotenv
 
 # 嘗試導入 OpenAI
 try:
@@ -19,6 +21,10 @@ except ImportError:
     st.warning("⚠️ OpenAI 套件未安裝，AI 功能將無法使用。請執行：pip install openai")
 
 
+# 載入環境變數，確保 CLI 與 Streamlit 共用設定
+load_dotenv()
+
+
 class LLMService:
     """LLM 服務類別"""
 
@@ -26,7 +32,11 @@ class LLMService:
         """初始化 LLM 服務"""
         self.client = None
         self.cache = {}
-        self.cache_ttl = 3600  # 快取 1 小時
+        self.model_name = os.getenv("OPENAI_MODEL", "gpt-3.5-turbo")
+        try:
+            self.cache_ttl = int(os.getenv("CACHE_TTL", "3600"))
+        except ValueError:
+            self.cache_ttl = 3600
 
         # 成本監控
         self.usage_stats = {
@@ -41,16 +51,18 @@ class LLMService:
 
     def _initialize_client(self):
         """初始化 OpenAI 客戶端"""
+        api_key = os.getenv("OPENAI_API_KEY")
+        if not api_key and hasattr(st, "secrets"):
+            api_key = st.secrets.get("OPENAI_API_KEY")
+
+        if not api_key:
+            st.warning("⚠️ 尚未設定 OPENAI_API_KEY，AI 功能將停用。")
+            return
+
         try:
-            api_key = os.getenv('OPENAI_API_KEY')
-            if api_key:
-                self.client = OpenAI(api_key=api_key)
-            else:
-                # 嘗試從 Streamlit secrets 讀取
-                if hasattr(st, 'secrets') and 'OPENAI_API_KEY' in st.secrets:
-                    self.client = OpenAI(api_key=st.secrets['OPENAI_API_KEY'])
-        except Exception as e:
-            st.warning(f"⚠️ OpenAI 初始化失敗：{str(e)}")
+            self.client = OpenAI(api_key=api_key)
+        except Exception as exc:
+            st.error(f"❌ OpenAI 客戶端初始化失敗：{exc}")
             self.client = None
 
     def is_available(self) -> bool:
@@ -84,7 +96,7 @@ class LLMService:
     def generate_insights(
         self,
         prompt: str,
-        model: str = "gpt-3.5-turbo",
+        model: Optional[str] = None,
         max_tokens: int = 1000,
         temperature: float = 0.7,
         use_cache: bool = True
@@ -106,8 +118,10 @@ class LLMService:
             return "❌ AI 功能目前無法使用，請設定 OPENAI_API_KEY"
 
         # 檢查快取
+        model_name = model or self.model_name
+
         if use_cache:
-            cache_key = self._get_cache_key(f"{model}:{prompt}")
+            cache_key = self._get_cache_key(f"{model_name}:{prompt}")
             cached_response = self._get_cached_response(cache_key)
             if cached_response:
                 return cached_response
@@ -115,7 +129,7 @@ class LLMService:
         try:
             # 調用 OpenAI API
             response = self.client.chat.completions.create(
-                model=model,
+                model=model_name,
                 messages=[
                     {
                         "role": "system",
@@ -139,9 +153,9 @@ class LLMService:
                 self.usage_stats['total_tokens'] += tokens
                 # 估算成本 (gpt-4o-mini: $0.15/1M input tokens, $0.60/1M output tokens)
                 # 簡化計算：假設 input/output 各佔一半
-                if 'gpt-4o-mini' in model or 'gpt-3.5' in model:
+                if 'gpt-4o-mini' in model_name or 'gpt-3.5' in model_name:
                     cost = (tokens / 1000000) * 0.375  # 平均成本
-                elif 'gpt-4' in model:
+                elif 'gpt-4' in model_name:
                     cost = (tokens / 1000000) * 15  # GPT-4 平均成本
                 else:
                     cost = (tokens / 1000000) * 0.375
@@ -155,22 +169,23 @@ class LLMService:
 
         except Exception as e:
             error_msg = str(e)
+            lowered = error_msg.lower()
 
-            # 根據錯誤類型返回不同訊息
-            if "rate_limit" in error_msg.lower():
+            if "rate_limit" in lowered:
                 return "⚠️ API 調用次數已達上限，請稍後再試。"
-            elif "api_key" in error_msg.lower():
-                return "❌ API 金鑰無效，請檢查 OPENAI_API_KEY 設定。"
-            elif "insufficient_quota" in error_msg.lower():
+            if "api key" in lowered or "authentication" in lowered:
+                return "❌ API 金鑰無效或未授權，請檢查 OPENAI_API_KEY 設定。"
+            if "insufficient_quota" in lowered:
                 return "⚠️ API 配額不足，請檢查您的 OpenAI 帳戶。"
-            else:
-                return f"❌ AI 分析失敗：{error_msg}"
+            if "connection" in lowered or "timeout" in lowered:
+                return "⚠️ 無法連線至 OpenAI，請確認網路或稍後再試。"
+            return f"❌ AI 分析失敗：{error_msg}"
 
     def generate_structured_output(
         self,
         prompt: str,
         schema: Dict[str, Any],
-        model: str = "gpt-3.5-turbo",
+        model: Optional[str] = None,
         use_cache: bool = True
     ) -> Dict[str, Any]:
         """
