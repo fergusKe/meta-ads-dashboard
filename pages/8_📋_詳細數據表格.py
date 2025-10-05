@@ -25,111 +25,134 @@ def show_detailed_data_table():
         st.error("無法載入數據，請檢查數據檔案。")
         return
 
-    # 側邊欄：多維度篩選器
-    st.sidebar.markdown("## 🔍 多維度篩選器")
+    # 多維度篩選器移到主要區域
+    st.markdown("## 🔍 多維度篩選器")
 
-    # 日期範圍篩選
-    if '開始' in df.columns and df['開始'].notna().any():
-        min_date = df['開始'].min().date()
-        max_date = df['開始'].max().date()
+    # 第一行：日期、活動、年齡
+    filter_col1, filter_col2, filter_col3 = st.columns(3)
 
-        st.sidebar.markdown("### 📅 日期範圍")
-        date_range = st.sidebar.date_input(
-            "選擇日期範圍",
-            value=(min_date, max_date),
-            min_value=min_date,
-            max_value=max_date
+    with filter_col1:
+        # 日期範圍篩選
+        if '開始' in df.columns and df['開始'].notna().any():
+            min_date = df['開始'].min().date()
+            max_date = df['開始'].max().date()
+
+            st.markdown("### 📅 日期範圍")
+            date_range = st.date_input(
+                "選擇日期範圍",
+                value=(min_date, max_date),
+                min_value=min_date,
+                max_value=max_date
+            )
+
+            if len(date_range) == 2:
+                start_date, end_date = date_range
+                df = df[(df['開始'].dt.date >= start_date) & (df['開始'].dt.date <= end_date)]
+
+    with filter_col2:
+        # 行銷活動篩選
+        st.markdown("### 🎯 行銷活動")
+        all_campaigns = sorted(df['行銷活動名稱'].unique().tolist())
+        selected_campaigns = st.multiselect(
+            "選擇活動（可多選）",
+            all_campaigns,
+            default=all_campaigns if len(all_campaigns) <= 10 else all_campaigns[:10]
         )
 
-        if len(date_range) == 2:
-            start_date, end_date = date_range
-            df = df[(df['開始'].dt.date >= start_date) & (df['開始'].dt.date <= end_date)]
+        if selected_campaigns:
+            df = df[df['行銷活動名稱'].isin(selected_campaigns)]
 
-    # 行銷活動篩選
-    st.sidebar.markdown("### 🎯 行銷活動")
-    all_campaigns = sorted(df['行銷活動名稱'].unique().tolist())
-    selected_campaigns = st.sidebar.multiselect(
-        "選擇活動（可多選）",
-        all_campaigns,
-        default=all_campaigns if len(all_campaigns) <= 10 else all_campaigns[:10]
-    )
+    with filter_col3:
+        # 年齡篩選
+        if '年齡' in df.columns:
+            st.markdown("### 👥 年齡")
+            all_ages = sorted([age for age in df['年齡'].unique() if age != '未知'])
+            selected_ages = st.multiselect(
+                "選擇年齡層",
+                all_ages,
+                default=all_ages
+            )
 
-    if selected_campaigns:
-        df = df[df['行銷活動名稱'].isin(selected_campaigns)]
+            if selected_ages:
+                df = df[df['年齡'].isin(selected_ages)]
 
-    # 年齡篩選
-    if '年齡' in df.columns:
-        st.sidebar.markdown("### 👥 年齡")
-        all_ages = sorted([age for age in df['年齡'].unique() if age != '未知'])
-        selected_ages = st.sidebar.multiselect(
-            "選擇年齡層",
-            all_ages,
-            default=all_ages
-        )
+    # 第二行：性別、品質、狀態
+    filter_col4, filter_col5, filter_col6 = st.columns(3)
 
-        if selected_ages:
-            df = df[df['年齡'].isin(selected_ages)]
+    with filter_col4:
+        # 性別篩選
+        if '性別' in df.columns:
+            st.markdown("### 👤 性別")
+            all_genders = [g for g in df['性別'].unique() if g != '未知']
+            selected_genders = st.multiselect(
+                "選擇性別",
+                all_genders,
+                default=all_genders
+            )
 
-    # 性別篩選
-    if '性別' in df.columns:
-        st.sidebar.markdown("### 👤 性別")
-        all_genders = [g for g in df['性別'].unique() if g != '未知']
-        selected_genders = st.sidebar.multiselect(
-            "選擇性別",
-            all_genders,
-            default=all_genders
-        )
+            if selected_genders:
+                df = df[df['性別'].isin(selected_genders)]
 
-        if selected_genders:
-            df = df[df['性別'].isin(selected_genders)]
+    with filter_col5:
+        # 品質排名篩選
+        if '品質排名' in df.columns:
+            st.markdown("### 🏆 品質排名")
+            quality_options = ['全部'] + sorted([q for q in df['品質排名'].unique() if q != '未知'])
+            selected_quality = st.selectbox(
+                "品質排名",
+                quality_options
+            )
 
-    # 品質排名篩選
-    if '品質排名' in df.columns:
-        st.sidebar.markdown("### 🏆 品質排名")
-        quality_options = ['全部'] + sorted([q for q in df['品質排名'].unique() if q != '未知'])
-        selected_quality = st.sidebar.selectbox(
-            "品質排名",
-            quality_options
-        )
+            if selected_quality != '全部':
+                df = df[df['品質排名'] == selected_quality]
 
-        if selected_quality != '全部':
-            df = df[df['品質排名'] == selected_quality]
+    with filter_col6:
+        # 投遞狀態篩選
+        if '投遞狀態' in df.columns:
+            st.markdown("### 📡 投遞狀態")
+            all_status = df['投遞狀態'].unique().tolist()
+            selected_status = st.multiselect(
+                "選擇狀態",
+                all_status,
+                default=all_status
+            )
 
-    # 投遞狀態篩選
-    if '投遞狀態' in df.columns:
-        st.sidebar.markdown("### 📡 投遞狀態")
-        all_status = df['投遞狀態'].unique().tolist()
-        selected_status = st.sidebar.multiselect(
-            "選擇狀態",
-            all_status,
-            default=all_status
-        )
+            if selected_status:
+                df = df[df['投遞狀態'].isin(selected_status)]
 
-        if selected_status:
-            df = df[df['投遞狀態'].isin(selected_status)]
+    # 第三行：ROAS 和花費範圍
+    filter_col7, filter_col8 = st.columns(2)
 
-    # ROAS 範圍篩選
-    st.sidebar.markdown("### 💰 ROAS 範圍")
-    roas_min = st.sidebar.number_input("最小 ROAS", value=0.0, step=0.5)
-    roas_max = st.sidebar.number_input("最大 ROAS", value=100.0, step=0.5)
+    with filter_col7:
+        # ROAS 範圍篩選
+        st.markdown("### 💰 ROAS 範圍")
+        roas_col1, roas_col2 = st.columns(2)
+        with roas_col1:
+            roas_min = st.number_input("最小 ROAS", value=0.0, step=0.5)
+        with roas_col2:
+            roas_max = st.number_input("最大 ROAS", value=100.0, step=0.5)
 
-    df = df[
-        (df['購買 ROAS（廣告投資報酬率）'] >= roas_min) &
-        (df['購買 ROAS（廣告投資報酬率）'] <= roas_max)
-    ]
+        df = df[
+            (df['購買 ROAS（廣告投資報酬率）'] >= roas_min) &
+            (df['購買 ROAS（廣告投資報酬率）'] <= roas_max)
+        ]
 
-    # 花費範圍篩選
-    st.sidebar.markdown("### 💵 花費範圍")
-    spend_min = st.sidebar.number_input("最小花費 (TWD)", value=0, step=100)
-    spend_max = st.sidebar.number_input("最大花費 (TWD)", value=int(df['花費金額 (TWD)'].max()) if not df.empty else 100000, step=100)
+    with filter_col8:
+        # 花費範圍篩選
+        st.markdown("### 💵 花費範圍")
+        spend_col1, spend_col2 = st.columns(2)
+        with spend_col1:
+            spend_min = st.number_input("最小花費 (TWD)", value=0, step=100)
+        with spend_col2:
+            spend_max = st.number_input("最大花費 (TWD)", value=int(df['花費金額 (TWD)'].max()) if not df.empty else 100000, step=100)
 
-    df = df[
-        (df['花費金額 (TWD)'] >= spend_min) &
-        (df['花費金額 (TWD)'] <= spend_max)
-    ]
+        df = df[
+            (df['花費金額 (TWD)'] >= spend_min) &
+            (df['花費金額 (TWD)'] <= spend_max)
+        ]
 
     # 顯示篩選結果摘要
-    st.info(f"📊 篩選結果：共 {len(df)} 筆記錄")
+    st.success(f"✅ 篩選結果：共 {len(df)} 筆記錄")
 
     st.markdown("---")
 

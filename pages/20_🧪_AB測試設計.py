@@ -225,32 +225,46 @@ def main():
         st.error("無法載入數據，請檢查數據檔案。")
         return
 
-    # 側邊欄設定
-    st.sidebar.header("🎯 測試目標")
+    # 主要內容 - 測試目標設定
+    col1, col2 = st.columns([2, 1])
 
-    test_objective = st.sidebar.selectbox(
-        "選擇優化目標",
-        [
-            "提升 CTR（點擊率）",
-            "提升轉換率",
-            "提升 ROAS",
-            "降低 CPA",
-            "擴大觸及",
-            "自定義目標"
-        ]
-    )
+    with col1:
+        st.subheader("🎯 測試目標設定")
 
-    if test_objective == "自定義目標":
-        custom_objective = st.sidebar.text_input("請描述測試目標")
-        test_objective = custom_objective if custom_objective else "自定義目標"
+        test_objective = st.selectbox(
+            "選擇優化目標",
+            [
+                "提升 CTR（點擊率）",
+                "提升轉換率",
+                "提升 ROAS",
+                "降低 CPA",
+                "擴大觸及",
+                "自定義目標"
+            ]
+        )
 
-    use_rag = st.sidebar.checkbox(
-        "🧠 啟用智能增強（RAG）",
-        value=True,
-        help="使用 RAG 技術參考歷史成功案例"
-    )
+        if test_objective == "自定義目標":
+            custom_objective = st.text_input("請描述測試目標")
+            test_objective = custom_objective if custom_objective else "自定義目標"
 
-    st.sidebar.divider()
+    with col2:
+        st.subheader("⚙️ 進階設定")
+
+        use_rag = st.checkbox(
+            "🧠 啟用智能增強（RAG）",
+            value=True,
+            help="使用 RAG 技術參考歷史成功案例"
+        )
+
+        st.info("""
+**功能說明**：
+- 當前表現分析
+- AI 測試設計
+- 樣本數計算
+- 測試追蹤範本
+        """)
+
+    st.divider()
 
     # 主要內容
     tab1, tab2, tab3, tab4 = st.tabs([

@@ -213,34 +213,52 @@ def main():
         st.error("無法載入數據，請檢查數據檔案。")
         return
 
-    # 側邊欄設定
-    st.sidebar.header("⚙️ 分析設定")
+    # 設定選項移到主要區域
+    col1, col2 = st.columns([2, 1])
 
-    min_roas = st.sidebar.number_input(
-        "最低 ROAS 門檻",
-        min_value=1.0,
-        max_value=10.0,
-        value=3.0,
-        step=0.5,
-        help="篩選高效受眾的 ROAS 門檻"
-    )
+    with col1:
+        st.subheader("⚙️ 分析設定")
 
-    min_spend = st.sidebar.number_input(
-        "最低花費金額 (TWD)",
-        min_value=100,
-        max_value=10000,
-        value=1000,
-        step=500,
-        help="篩選有足夠數據量的受眾"
-    )
+        setting_col1, setting_col2 = st.columns(2)
 
-    use_rag = st.sidebar.checkbox(
-        "🧠 啟用智能增強（RAG）",
-        value=True,
-        help="使用 RAG 技術參考歷史成功受眾案例"
-    )
+        with setting_col1:
+            min_roas = st.number_input(
+                "最低 ROAS 門檻",
+                min_value=1.0,
+                max_value=10.0,
+                value=3.0,
+                step=0.5,
+                help="篩選高效受眾的 ROAS 門檻"
+            )
 
-    st.sidebar.divider()
+        with setting_col2:
+            min_spend = st.number_input(
+                "最低花費金額 (TWD)",
+                min_value=100,
+                max_value=10000,
+                value=1000,
+                step=500,
+                help="篩選有足夠數據量的受眾"
+            )
+
+        use_rag = st.checkbox(
+            "🧠 啟用智能增強（RAG）",
+            value=True,
+            help="使用 RAG 技術參考歷史成功受眾案例"
+        )
+
+    with col2:
+        st.subheader("📊 功能說明")
+        st.info("""
+        **受眾擴展分析**
+
+        - 📊 分析受眾表現
+        - 🎯 找出高效受眾
+        - 🤖 AI 生成擴展建議
+        - 💡 參考歷史案例
+        """)
+
+    st.markdown("---")
 
     # 主要內容
     tab1, tab2, tab3 = st.tabs(["📊 受眾表現分析", "🎯 高效受眾", "🚀 AI 擴展建議"])

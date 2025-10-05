@@ -272,25 +272,39 @@ def main():
         st.error("無法載入數據，請檢查數據檔案。")
         return
 
-    # 側邊欄設定
-    st.sidebar.header("⚙️ 分析設定")
+    # 分析設定區域（移到主要內容區）
+    col1, col2 = st.columns([2, 1])
 
-    target_roas = st.sidebar.number_input(
-        "目標 ROAS",
-        min_value=1.0,
-        max_value=10.0,
-        value=3.0,
-        step=0.5,
-        help="用於判斷高效/低效活動的 ROAS 門檻"
-    )
+    with col1:
+        st.markdown("### ⚙️ 分析設定")
 
-    use_rag = st.sidebar.checkbox(
-        "🧠 啟用智能增強（RAG）",
-        value=True,
-        help="使用 RAG 技術參考歷史成功案例"
-    )
+        target_roas = st.number_input(
+            "目標 ROAS",
+            min_value=1.0,
+            max_value=10.0,
+            value=3.0,
+            step=0.5,
+            help="用於判斷高效/低效活動的 ROAS 門檻"
+        )
 
-    st.sidebar.divider()
+        use_rag = st.checkbox(
+            "🧠 啟用智能增強（RAG）",
+            value=True,
+            help="使用 RAG 技術參考歷史成功案例"
+        )
+
+    with col2:
+        st.markdown("### 📊 功能說明")
+        st.info("""
+        **預算優化分析**
+
+        - 識別高效活動（增加預算）
+        - 識別低效活動（減少預算）
+        - 模擬預算重新分配
+        - AI 生成優化建議
+        """)
+
+    st.divider()
 
     # 分析預算效率
     budget_analysis = analyze_budget_efficiency(df)

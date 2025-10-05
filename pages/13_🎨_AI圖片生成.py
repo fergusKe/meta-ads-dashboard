@@ -269,41 +269,56 @@ def main():
     if not client:
         st.stop()
 
-    # 側邊欄設定
-    st.sidebar.header("🎯 圖片生成設定")
-
-    # 圖片類型選擇
-    image_type = st.sidebar.selectbox(
-        "選擇圖片類型",
-        ["產品展示", "生活場景", "品牌識別", "促銷活動"]
-    )
-
-    # 風格選擇
-    style_preference = st.sidebar.selectbox(
-        "選擇視覺風格",
-        ["現代簡約", "溫暖自然", "時尚潮流", "傳統文化", "自定義"]
-    )
-
-    if style_preference == "自定義":
-        custom_style = st.sidebar.text_input("請描述您想要的風格")
-        style_preference = custom_style
-
-    # 圖片尺寸
-    image_size = st.sidebar.selectbox(
-        "圖片尺寸",
-        ["1:1 (1024x1024) - Instagram貼文", "16:9 (1920x1080) - Facebook橫幅", "9:16 (1080x1920) - Stories"]
-    )
-
-    # 特殊要求
-    special_requirements = st.sidebar.text_area(
-        "特殊要求（選填）",
-        placeholder="例如：特定色彩、元素、情感表達、目標考量等",
-        height=100
-    )
-
-    # 主要內容區域
+    # 主要內容區域 - 設定選項
     col1, col2 = st.columns([2, 1])
 
+    with col1:
+        st.subheader("⚙️ 圖片生成設定")
+
+        # 圖片類型選擇
+        image_type = st.selectbox(
+            "選擇圖片類型",
+            ["產品展示", "生活場景", "品牌識別", "促銷活動"]
+        )
+
+        # 風格選擇
+        style_preference = st.selectbox(
+            "選擇視覺風格",
+            ["現代簡約", "溫暖自然", "時尚潮流", "傳統文化", "自定義"]
+        )
+
+        if style_preference == "自定義":
+            custom_style = st.text_input("請描述您想要的風格")
+            style_preference = custom_style if custom_style else style_preference
+
+        # 圖片尺寸
+        image_size = st.selectbox(
+            "圖片尺寸",
+            ["1:1 (1024x1024) - Instagram貼文", "16:9 (1920x1080) - Facebook橫幅", "9:16 (1080x1920) - Stories"]
+        )
+
+        # 特殊要求
+        special_requirements = st.text_area(
+            "特殊要求（選填）",
+            placeholder="例如：特定色彩、元素、情感表達、目標考量等",
+            height=100
+        )
+
+    with col2:
+        st.subheader("📋 需求摘要")
+
+        requirements_summary = f"""
+圖片類型：{image_type}
+視覺風格：{style_preference}
+圖片尺寸：{image_size}
+特殊要求：{special_requirements if special_requirements else '無'}
+"""
+
+        st.text_area("當前設定", value=requirements_summary, height=220, disabled=True, label_visibility="collapsed")
+
+    st.divider()
+
+    # 品牌分析與生成按鈕區域
     with col1:
         # 檢查智能推薦受眾
         recommended_audience = st.session_state.get('target_audience', '')
@@ -358,16 +373,7 @@ def main():
             brand_analysis = {}
 
     with col2:
-        st.subheader("🎯 生成需求摘要")
-
-        requirements_summary = f"""
-圖片類型：{image_type}
-視覺風格：{style_preference}
-圖片尺寸：{image_size}
-特殊要求：{special_requirements if special_requirements else '無'}
-"""
-
-        st.text_area("需求摘要", value=requirements_summary, height=150, disabled=True)
+        st.subheader("🚀 執行生成")
 
         # 檢查是否需要自動生成（來自智能投放策略的推薦）
         auto_generate = (recommended_audience and
@@ -380,56 +386,67 @@ def main():
         # 生成按鈕或自動生成
         manual_generate = st.button("🚀 開始生成圖片", type="primary", use_container_width=True)
 
-        if manual_generate or auto_generate:
-            if auto_generate:
-                st.info("🎯 正在基於智能推薦的受眾組合生成圖片...")
+    # 執行生成（移到 columns 外面，使用全寬）
+    if manual_generate or auto_generate:
+        if auto_generate:
+            st.info("🎯 正在基於智能推薦的受眾組合生成圖片...")
 
-            with st.spinner("AI 正在創作中，請稍候..."):
-                # 生成提示詞
-                prompt = generate_image_prompt(
+        with st.spinner("AI 正在創作中，請稍候..."):
+            # 準備 requirements_summary
+            requirements_summary = f"""
+圖片類型：{image_type}
+視覺風格：{style_preference}
+圖片尺寸：{image_size}
+特殊要求：{special_requirements if special_requirements else '無'}
+"""
+
+            # 生成提示詞
+            prompt = generate_image_prompt(
+                image_type,
+                style_preference,
+                brand_analysis if df is not None else {},
+                requirements_summary
+            )
+
+            # 呼叫 API
+            image_data = call_dalle_api(prompt, client, image_size)
+
+            if image_data:
+                if auto_generate:
+                    st.success("✅ 基於智能推薦的圖片生成完成！")
+                else:
+                    st.success("✅ 圖片生成完成！")
+
+                # 儲存歷史
+                save_generation_history(
                     image_type,
                     style_preference,
-                    brand_analysis if df is not None else {},
-                    requirements_summary
+                    requirements_summary,
+                    prompt,
+                    True
                 )
 
-                # 呼叫 API
-                image_data = call_dalle_api(prompt, client, image_size)
+                # 顯示結果
+                display_generated_image(
+                    image_data,
+                    {"prompt": prompt, "type": image_type, "style": style_preference}
+                )
 
-                if image_data:
-                    if auto_generate:
-                        st.success("✅ 基於智能推薦的圖片生成完成！")
-                    else:
-                        st.success("✅ 圖片生成完成！")
+            else:
+                # 儲存失敗記錄
+                save_generation_history(
+                    image_type,
+                    style_preference,
+                    requirements_summary,
+                    prompt,
+                    False
+                )
 
-                    # 儲存歷史
-                    save_generation_history(
-                        image_type,
-                        style_preference,
-                        requirements_summary,
-                        prompt,
-                        True
-                    )
+                # 顯示備選方案
+                st.error("❌ 圖片生成失敗")
+                st.info("💡 您可以嘗試：\n- 調整需求描述\n- 選擇不同的風格\n- 簡化特殊要求")
 
-                    # 顯示結果
-                    display_generated_image(
-                        image_data,
-                        {"prompt": prompt, "type": image_type, "style": style_preference}
-                    )
-
-                else:
-                    # 儲存失敗記錄
-                    save_generation_history(
-                        image_type,
-                        style_preference,
-                        requirements_summary,
-                        prompt,
-                        False
-                    )
-
-                    # 顯示備選方案
-                    st.error("❌ 圖片生成失敗")
-                    st.info("💡 您可以嘗試：\n- 調整需求描述\n- 選擇不同的風格\n- 簡化特殊要求")
+    st.divider()
 
     # 顯示風格範例
     display_style_examples()

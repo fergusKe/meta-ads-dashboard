@@ -95,78 +95,84 @@ def main():
     # 初始化
     initialize_session()
 
-    # 側邊欄
-    st.sidebar.header("💬 對話助手")
-
-    # RAG 狀態
-    if st.session_state.rag_enabled:
-        st.sidebar.success("✅ RAG 知識庫已啟用")
-    else:
-        st.sidebar.warning("⚠️ RAG 知識庫未啟用")
-        st.sidebar.caption("前往「RAG 知識庫管理」建立")
-
-    # 對話統計
-    st.sidebar.markdown("### 📊 對話統計")
-    st.sidebar.metric("對話輪數", len(st.session_state.messages))
-
-    # 清除對話
-    if st.sidebar.button("🗑️ 清除對話歷史"):
-        st.session_state.agent.clear_history()
-        st.session_state.messages = [
-            {
-                "role": "assistant",
-                "content": "對話已清除！有什麼可以幫您的嗎？",
-                "intent": "chat",
-                "suggestions": []
-            }
-        ]
-        st.rerun()
-
-    st.sidebar.divider()
-
-    # 範例問題
-    st.sidebar.markdown("### 💡 範例問題")
-
-    example_questions = [
-        "目前整體投放表現如何？",
-        "幫我分析表現最好的活動",
-        "有哪些活動需要優化？",
-        "給我看高 CTR 的文案範例",
-        "推薦受眾擴展策略"
-    ]
-
-    for q in example_questions:
-        if st.sidebar.button(q, key=f"example_{hash(q)}"):
-            st.session_state.user_input = q
-            st.rerun()
-
-    st.sidebar.divider()
-
-    # Agent 資訊
-    st.sidebar.markdown("""
-    ### 🤖 Agent 資訊
-
-    **名字**: 小廣
-    **框架**: Pydantic AI
-    **模型**: GPT-4o-mini
-    **工具**: 4 個
-    - 查詢活動
-    - 獲取 Top 活動
-    - RAG 搜尋
-    - 整體摘要
-
-    **能力**:
-    - 多輪對話
-    - 上下文記憶
-    - 意圖識別
-    - 工具自動選擇
-    """)
-
     # 載入數據
     df = load_meta_ads_data()
     if df is None:
         st.error("無法載入數據，請檢查數據檔案。")
         return
+
+    # 頂部控制區域
+    col1, col2, col3 = st.columns([2, 1, 1])
+
+    with col1:
+        # RAG 狀態
+        if st.session_state.rag_enabled:
+            st.success("✅ RAG 知識庫已啟用")
+        else:
+            st.warning("⚠️ RAG 知識庫未啟用 - 前往「RAG 知識庫管理」建立")
+
+    with col2:
+        # 對話統計
+        st.metric("對話輪數", len(st.session_state.messages))
+
+    with col3:
+        # 清除對話
+        if st.button("🗑️ 清除對話歷史", use_container_width=True):
+            st.session_state.agent.clear_history()
+            st.session_state.messages = [
+                {
+                    "role": "assistant",
+                    "content": "對話已清除！有什麼可以幫您的嗎？",
+                    "intent": "chat",
+                    "suggestions": []
+                }
+            ]
+            st.rerun()
+
+    st.divider()
+
+    # 範例問題和 Agent 資訊
+    col_left, col_right = st.columns([3, 1])
+
+    with col_right:
+        # Agent 資訊
+        with st.expander("🤖 Agent 資訊", expanded=False):
+            st.markdown("""
+            **名字**: 小廣
+            **框架**: Pydantic AI
+            **模型**: GPT-4o-mini
+            **工具**: 4 個
+            - 查詢活動
+            - 獲取 Top 活動
+            - RAG 搜尋
+            - 整體摘要
+
+            **能力**:
+            - 多輪對話
+            - 上下文記憶
+            - 意圖識別
+            - 工具自動選擇
+            """)
+
+        # 範例問題
+        st.markdown("### 💡 範例問題")
+
+        example_questions = [
+            "目前整體投放表現如何？",
+            "幫我分析表現最好的活動",
+            "有哪些活動需要優化？",
+            "給我看高 CTR 的文案範例",
+            "推薦受眾擴展策略"
+        ]
+
+        for i, q in enumerate(example_questions):
+            if st.button(q, key=f"example_{i}", use_container_width=True):
+                st.session_state.user_input = q
+                st.rerun()
+
+    with col_left:
+        # 顯示對話歷史
+        st.markdown("### 💬 對話區域")
 
     # 顯示對話歷史
     for message in st.session_state.messages:

@@ -168,45 +168,48 @@ def main():
         st.error("無法載入廣告數據，請檢查數據檔案。")
         return
 
-    # 側邊欄設定
-    st.sidebar.header("⚙️ 搜尋設定")
+    # 主要內容 - 搜尋設定
+    col1, col2 = st.columns([2, 1])
 
-    # API Token 輸入
-    api_token = st.sidebar.text_input(
-        "Meta Ad Library API Token",
-        type="password",
-        help="請輸入您的 Meta Ad Library API Access Token"
-    )
+    with col1:
+        st.subheader("⚙️ 搜尋設定")
 
-    # 搜尋關鍵字
-    search_keywords = st.sidebar.text_input(
-        "競品關鍵字",
-        placeholder="例如：茶葉、有機茶",
-        help="輸入競品相關關鍵字"
-    )
+        # API Token 輸入
+        api_token = st.text_input(
+            "Meta Ad Library API Token",
+            type="password",
+            help="請輸入您的 Meta Ad Library API Access Token"
+        )
 
-    # 搜尋數量
-    result_limit = st.sidebar.slider(
-        "搜尋數量",
-        min_value=5,
-        max_value=50,
-        value=10,
-        step=5
-    )
+        # 搜尋關鍵字
+        search_keywords = st.text_input(
+            "競品關鍵字",
+            placeholder="例如：茶葉、有機茶",
+            help="輸入競品相關關鍵字"
+        )
 
-    st.sidebar.divider()
+        # 搜尋數量
+        result_limit = st.slider(
+            "搜尋數量",
+            min_value=5,
+            max_value=50,
+            value=10,
+            step=5
+        )
 
-    # API 說明
-    st.sidebar.info("""
-    ### 📌 如何取得 API Token
+    with col2:
+        st.subheader("📌 如何取得 API Token")
 
-    1. 前往 [Meta for Developers](https://developers.facebook.com/)
-    2. 建立應用程式
-    3. 啟用 Ad Library API
-    4. 取得 Access Token
+        st.info("""
+1. 前往 [Meta for Developers](https://developers.facebook.com/)
+2. 建立應用程式
+3. 啟用 Ad Library API
+4. 取得 Access Token
 
-    **注意**：需要驗證身分才能使用 Ad Library API
-    """)
+**注意**：需要驗證身分
+        """)
+
+    st.divider()
 
     # 主要內容
     tab1, tab2, tab3 = st.tabs(["🔍 搜尋競品", "📊 AI 分析", "💡 差異化策略"])

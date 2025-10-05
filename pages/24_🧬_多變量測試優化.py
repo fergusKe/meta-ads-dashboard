@@ -238,15 +238,28 @@ def main():
         st.error("無法載入數據，請檢查數據檔案。")
         return
 
-    # 側邊欄設定
-    st.sidebar.header("🎯 測試設定")
+    # 測試設定移到主要區域
+    col1, col2 = st.columns([2, 1])
 
-    test_objective = st.sidebar.selectbox(
-        "測試目標",
-        ["提升轉換率", "提升 CTR", "提升 ROAS", "降低 CPA"]
-    )
+    with col1:
+        st.subheader("🎯 測試設定")
+        test_objective = st.selectbox(
+            "測試目標",
+            ["提升轉換率", "提升 CTR", "提升 ROAS", "降低 CPA"]
+        )
 
-    st.sidebar.divider()
+    with col2:
+        st.subheader("📊 功能說明")
+        st.info("""
+        **MVT 測試流程**
+
+        - 🔧 設計測試變體
+        - 📊 預覽所有組合
+        - 🤖 AI 優化建議
+        - 📈 結果分析解讀
+        """)
+
+    st.markdown("---")
 
     # 主要內容
     tab1, tab2, tab3, tab4 = st.tabs([

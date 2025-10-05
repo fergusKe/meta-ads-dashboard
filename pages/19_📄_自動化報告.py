@@ -267,50 +267,68 @@ def main():
         st.error("無法載入數據，請檢查數據檔案。")
         return
 
-    # 側邊欄設定
-    st.sidebar.header("⚙️ 報告設定")
+    # 報告設定區域（移到主要內容區）
+    col1, col2 = st.columns([2, 1])
 
-    # 報告類型
-    report_type = st.sidebar.selectbox(
-        "報告類型",
-        ["週報", "月報", "自定義期間"]
-    )
+    with col1:
+        st.markdown("### ⚙️ 報告設定")
 
-    # 日期範圍選擇
-    if report_type == "週報":
-        # 預設最近一週
-        default_end = df['開始'].max() if '開始' in df.columns else datetime.now()
-        default_start = default_end - timedelta(days=7)
-        previous_start = default_start - timedelta(days=7)
-        previous_end = default_start - timedelta(days=1)
-        period_name = f"週報 ({default_start.strftime('%Y-%m-%d')} ~ {default_end.strftime('%Y-%m-%d')})"
+        # 報告類型
+        report_type = st.selectbox(
+            "報告類型",
+            ["週報", "月報", "自定義期間"]
+        )
 
-    elif report_type == "月報":
-        # 預設最近一個月
-        default_end = df['開始'].max() if '開始' in df.columns else datetime.now()
-        default_start = default_end - timedelta(days=30)
-        previous_start = default_start - timedelta(days=30)
-        previous_end = default_start - timedelta(days=1)
-        period_name = f"月報 ({default_start.strftime('%Y-%m-%d')} ~ {default_end.strftime('%Y-%m-%d')})"
+        # 日期範圍選擇
+        if report_type == "週報":
+            # 預設最近一週
+            default_end = df['開始'].max() if '開始' in df.columns else datetime.now()
+            default_start = default_end - timedelta(days=7)
+            previous_start = default_start - timedelta(days=7)
+            previous_end = default_start - timedelta(days=1)
+            period_name = f"週報 ({default_start.strftime('%Y-%m-%d')} ~ {default_end.strftime('%Y-%m-%d')})"
 
-    else:  # 自定義期間
-        col1, col2 = st.sidebar.columns(2)
-        with col1:
-            default_start = st.date_input("開始日期", value=datetime.now() - timedelta(days=7))
-        with col2:
-            default_end = st.date_input("結束日期", value=datetime.now())
+        elif report_type == "月報":
+            # 預設最近一個月
+            default_end = df['開始'].max() if '開始' in df.columns else datetime.now()
+            default_start = default_end - timedelta(days=30)
+            previous_start = default_start - timedelta(days=30)
+            previous_end = default_start - timedelta(days=1)
+            period_name = f"月報 ({default_start.strftime('%Y-%m-%d')} ~ {default_end.strftime('%Y-%m-%d')})"
 
-        default_start = pd.Timestamp(default_start)
-        default_end = pd.Timestamp(default_end)
+        else:  # 自定義期間
+            date_col1, date_col2 = st.columns(2)
+            with date_col1:
+                default_start = st.date_input("開始日期", value=datetime.now() - timedelta(days=7))
+            with date_col2:
+                default_end = st.date_input("結束日期", value=datetime.now())
 
-        # 計算對比期間（相同長度）
-        period_length = (default_end - default_start).days
-        previous_end = default_start - timedelta(days=1)
-        previous_start = previous_end - timedelta(days=period_length)
+            default_start = pd.Timestamp(default_start)
+            default_end = pd.Timestamp(default_end)
 
-        period_name = f"自定義期間 ({default_start.strftime('%Y-%m-%d')} ~ {default_end.strftime('%Y-%m-%d')})"
+            # 計算對比期間（相同長度）
+            period_length = (default_end - default_start).days
+            previous_end = default_start - timedelta(days=1)
+            previous_start = previous_end - timedelta(days=period_length)
 
-    st.sidebar.divider()
+            period_name = f"自定義期間 ({default_start.strftime('%Y-%m-%d')} ~ {default_end.strftime('%Y-%m-%d')})"
+
+        st.info(f"📅 分析期間：{period_name}")
+
+    with col2:
+        st.markdown("### 📊 功能說明")
+        st.info("""
+        **自動化報告功能**
+
+        - 生成專業週報/月報
+        - AI 分析數據趨勢
+        - 提供優化建議
+        - 支援匯出 Markdown
+
+        **節省時間**：原本 1-2 小時的報告，5 分鐘完成！
+        """)
+
+    st.divider()
 
     # 主要內容
     tab1, tab2, tab3 = st.tabs(["📊 數據預覽", "🤖 生成報告", "💾 匯出報告"])
