@@ -1,205 +1,95 @@
 import streamlit as st
 import pandas as pd
 import os
-import base64
-import json
 from datetime import datetime
 from io import BytesIO
 from PIL import Image
-import requests
-from openai import OpenAI
 from utils.data_loader import load_meta_ads_data
-from utils.llm_service import LLMService
+from utils.agents import ImageAnalysisAgent, ImageAnalysisResult
 
 st.set_page_config(page_title="AI 圖片分析與優化", page_icon="📸", layout="wide")
 
-def load_openai_client():
-    """載入 OpenAI 客戶端"""
+# 初始化 Agent
+@st.cache_resource
+def get_image_analysis_agent():
+    """取得 ImageAnalysisAgent 實例"""
     try:
-        api_key = os.getenv('OPENAI_API_KEY')
-        if not api_key:
-            st.error("❌ 請在 .env 檔案中設定 OPENAI_API_KEY")
-            return None
-        return OpenAI(api_key=api_key)
+        return ImageAnalysisAgent()
     except Exception as e:
-        st.error(f"❌ OpenAI 初始化失敗：{str(e)}")
+        st.error(f"❌ ImageAnalysisAgent 初始化失敗：{str(e)}")
         return None
 
-def encode_image_to_base64(image):
-    """將圖片編碼為 base64"""
-    buffered = BytesIO()
-    image.save(buffered, format="PNG")
-    return base64.b64encode(buffered.getvalue()).decode('utf-8')
 
-def analyze_image_with_vision(image, client, brand_context=""):
-    """使用 GPT-4o Vision 分析圖片"""
-    try:
-        # 將圖片轉為 base64
-        base64_image = encode_image_to_base64(image)
-
-        # 構建分析提示詞
-        prompt = f"""
-請以專業廣告分析師的角度，詳細分析這張廣告圖片的優缺點，並評估其是否適合用於 Meta 廣告投放。
-
-品牌背景：
-{brand_context if brand_context else "耘初茶食 - 台灣茶飲品牌，注重品質與傳統工藝"}
-
-請從以下 6 個維度進行評分（1-10分）和詳細分析：
-
-1. **視覺吸引力** (1-10分)
-   - 第一眼的吸引程度
-   - 是否能在動態消息中脫穎而出
-   - 整體美感評估
-
-2. **構圖設計** (1-10分)
-   - 主體是否清晰
-   - 視覺層次是否合理
-   - 留白和平衡感
-
-3. **色彩運用** (1-10分)
-   - 色彩搭配是否和諧
-   - 是否符合品牌調性
-   - 色彩對比與可讀性
-
-4. **文字可讀性** (1-10分)
-   - 文字大小是否適中
-   - 字體選擇是否合適
-   - 手機端是否清晰可讀
-
-5. **品牌一致性** (1-10分)
-   - 是否體現品牌特色
-   - 風格是否符合品牌形象
-   - 品牌識別度
-
-6. **投放適配性** (1-10分)
-   - 是否符合 Meta 廣告規範
-   - 是否適合目標受眾
-   - 轉換潛力評估
-
-請以 JSON 格式回傳分析結果：
-{{
-    "scores": {{
-        "visual_appeal": <分數>,
-        "composition": <分數>,
-        "color_usage": <分數>,
-        "text_readability": <分數>,
-        "brand_consistency": <分數>,
-        "ad_suitability": <分數>
-    }},
-    "overall_score": <總分平均>,
-    "strengths": ["優點1", "優點2", "優點3"],
-    "weaknesses": ["缺點1", "缺點2", "缺點3"],
-    "detailed_analysis": {{
-        "visual_appeal": "詳細分析...",
-        "composition": "詳細分析...",
-        "color_usage": "詳細分析...",
-        "text_readability": "詳細分析...",
-        "brand_consistency": "詳細分析...",
-        "ad_suitability": "詳細分析..."
-    }},
-    "optimization_suggestions": [
-        "建議1：具體操作步驟",
-        "建議2：具體操作步驟",
-        "建議3：具體操作步驟",
-        "建議4：具體操作步驟",
-        "建議5：具體操作步驟"
-    ],
-    "is_suitable_for_ads": <true/false>,
-    "suitability_reason": "適合/不適合的原因說明",
-    "target_audience_recommendation": "建議的目標受眾特徵"
-}}
-"""
-
-        # 呼叫 GPT-4o Vision API
-        response = client.chat.completions.create(
-            model="gpt-4o",
-            messages=[
-                {
-                    "role": "user",
-                    "content": [
-                        {
-                            "type": "text",
-                            "text": prompt
-                        },
-                        {
-                            "type": "image_url",
-                            "image_url": {
-                                "url": f"data:image/png;base64,{base64_image}"
-                            }
-                        }
-                    ]
-                }
-            ],
-            max_tokens=2000,
-            temperature=0.3
-        )
-
-        # 解析回應
-        result_text = response.choices[0].message.content
-
-        # 嘗試提取 JSON
-        try:
-            # 移除可能的 markdown 標記
-            if "```json" in result_text:
-                result_text = result_text.split("```json")[1].split("```")[0]
-            elif "```" in result_text:
-                result_text = result_text.split("```")[1].split("```")[0]
-
-            analysis_result = json.loads(result_text.strip())
-            return analysis_result
-
-        except json.JSONDecodeError:
-            st.error("❌ 無法解析 AI 分析結果")
-            st.text_area("原始回應", result_text, height=200)
-            return None
-
-    except Exception as e:
-        st.error(f"❌ 圖片分析失敗：{str(e)}")
-        return None
-
-def generate_optimized_image_with_gemini(optimization_prompt, image_size="1024x1024"):
-    """使用 Gemini 生成優化後的圖片"""
+def call_gemini_image_api(prompt, size="1024x1024"):
+    """呼叫 Gemini 生成圖片，若無圖片則回傳 None"""
     api_key = os.getenv('GEMINI_API_KEY')
     if not api_key:
-        return None, None
+        return None
 
     try:
         from google import genai
     except ImportError:
-        return None, None
+        st.error("❌ 尚未安裝 google-genai 套件，請執行 `uv add google-genai`（或 `pip install google-genai`）後再試。")
+        return None
 
     try:
         client = genai.Client(api_key=api_key)
         model_name = os.getenv('GEMINI_IMAGE_MODEL', 'gemini-2.5-flash-image')
-
         response = client.models.generate_content(
             model=model_name,
-            contents=[optimization_prompt],
+            contents=[prompt],
         )
 
-        # 解析回應
-        if hasattr(response, 'candidates') and response.candidates:
-            for candidate in response.candidates:
-                if hasattr(candidate, 'content') and candidate.content:
-                    if hasattr(candidate.content, 'parts') and candidate.content.parts:
-                        for part in candidate.content.parts:
-                            if hasattr(part, 'inline_data') and part.inline_data:
-                                if hasattr(part.inline_data, 'data') and part.inline_data.data:
-                                    return part.inline_data.data, optimization_prompt
+        with st.expander("🧪 Gemini raw response (debug)", expanded=False):
+            try:
+                st.json(response.model_dump())
+            except Exception:
+                st.write(response)
 
-        return None, None
+        for candidate in getattr(response, 'candidates', []):
+            content = getattr(candidate, 'content', None)
+            if not content:
+                continue
+            for part in getattr(content, 'parts', []):
+                inline_data = getattr(part, 'inline_data', None)
+                if inline_data and getattr(inline_data, 'data', None):
+                    return inline_data.data
 
-    except Exception:
-        return None, None
+        return None
+    except Exception as exc:
+        st.error(f"❌ Gemini 生成失敗：{exc}")
+        return None
+def get_openai_client():
+    """依據環境變數初始化 OpenAI 客戶端"""
+    api_key = os.getenv('OPENAI_API_KEY')
+    if not api_key:
+        st.error("❌ 請設定 OPENAI_API_KEY 才能進行圖片分析")
+        return None
 
-def generate_optimized_image(original_analysis, client, image_size="1024x1024"):
-    """基於分析結果生成優化後的圖片（優先使用 Gemini，失敗時使用 DALL-E 3）"""
     try:
-        # 根據分析結果構建優化提示詞
+        from openai import OpenAI
+    except ImportError:
+        st.error("❌ 尚未安裝 openai 套件，請執行 `uv add openai`（或 `pip install openai`）後再試。")
+        return None
+
+    try:
+        return OpenAI(api_key=api_key)
+    except Exception as exc:
+        st.error(f"❌ 無法初始化 OpenAI 客戶端：{exc}")
+        return None
+
+
+
+def generate_optimized_image(original_analysis, image_size="1024x1024"):
+    """基於分析結果生成優化後的圖片（使用 Gemini）"""
+    if isinstance(original_analysis, ImageAnalysisResult):
+        weaknesses = original_analysis.weaknesses
+        suggestions = original_analysis.optimization_suggestions
+    else:
         weaknesses = original_analysis.get('weaknesses', [])
         suggestions = original_analysis.get('optimization_suggestions', [])
 
-        optimization_prompt = f"""
+    optimization_prompt = f"""
 創建一張優化的廣告圖片，改善以下問題：
 
 需要改善的問題：
@@ -224,46 +114,14 @@ def generate_optimized_image(original_analysis, client, image_size="1024x1024"):
 解析度：高清晰度，適合社群媒體使用
 """
 
-        # 優先嘗試使用 Gemini
-        image_data, prompt = generate_optimized_image_with_gemini(optimization_prompt, image_size)
-        if image_data:
-            st.info("🎨 使用 Gemini 2.5 Flash Image (nano-banana) 生成")
-            return image_data, prompt
+    image_data = call_gemini_image_api(optimization_prompt, image_size)
+    if image_data:
+        st.info("🎨 使用 Gemini 2.5 Flash Image 生成優化結果")
+        return image_data, optimization_prompt
 
-        # Gemini 失敗時使用 DALL-E 3
-        st.info("🎨 使用 DALL-E 3 生成（Gemini 不可用）")
+    st.error("❌ Gemini 未回傳圖片內容，請調整分析結果或稍後再試。")
+    return None, None
 
-        # 將尺寸選項映射到 DALL-E 3 支援的尺寸
-        size_mapping = {
-            "1024x1024": "1024x1024",
-            "1792x1024": "1792x1024",
-            "1024x1792": "1024x1792"
-        }
-        dalle_size = size_mapping.get(image_size, "1024x1024")
-
-        # 呼叫 DALL-E 3 API
-        response = client.images.generate(
-            model="dall-e-3",
-            prompt=optimization_prompt,
-            size=dalle_size,
-            quality="standard",
-            n=1,
-        )
-
-        # 取得圖片 URL
-        image_url = response.data[0].url
-
-        # 下載圖片
-        img_response = requests.get(image_url, timeout=30)
-        if img_response.status_code == 200:
-            return img_response.content, optimization_prompt
-        else:
-            st.error(f"❌ 圖片下載失敗：{img_response.status_code}")
-            return None, None
-
-    except Exception as e:
-        st.error(f"❌ 優化圖片生成失敗：{str(e)}")
-        return None, None
 
 def display_score_card(title, score, max_score=10):
     """顯示評分卡片"""
@@ -322,11 +180,6 @@ def main():
 
     # 載入數據和 API 客戶端
     df = load_meta_ads_data()
-    client = load_openai_client()
-
-    if not client:
-        st.stop()
-
     # 取得品牌背景
     brand_context = get_brand_context(df)
 
@@ -358,8 +211,10 @@ def main():
     st.divider()
 
     if uploaded_file is not None:
-        # 顯示上傳的圖片
-        image = Image.open(uploaded_file)
+        image_bytes = uploaded_file.getvalue()
+        image = Image.open(BytesIO(image_bytes))
+        image.load()
+        image_key = f"{getattr(uploaded_file, 'name', 'uploaded')}-{len(image_bytes)}"
 
         col1, col2 = st.columns([1, 1])
 
@@ -388,25 +243,63 @@ def main():
             # 分析按鈕
             if st.button("🚀 開始分析圖片", type="primary", use_container_width=True):
                 with st.spinner("AI 正在分析圖片，請稍候..."):
-                    # 呼叫 Vision API 分析
-                    analysis = analyze_image_with_vision(image, client, brand_context)
+                    analysis_agent = get_image_analysis_agent()
+                    if not analysis_agent:
+                        st.stop()
 
-                    if analysis:
-                        # 儲存分析結果到 session state
-                        st.session_state['image_analysis'] = analysis
-                        st.session_state['analyzed_image'] = image
-                        st.success("✅ 分析完成！")
-                        st.rerun()
+                    openai_client = get_openai_client()
+                    if not openai_client:
+                        st.stop()
+
+                    analysis_df = df if df is not None else pd.DataFrame(
+                        columns=[
+                            '購買 ROAS（廣告投資報酬率）',
+                            'CTR（全部）',
+                            '每次購買的成本',
+                            '花費金額 (TWD)',
+                            '購買次數',
+                            '觸及人數',
+                            '行銷活動名稱',
+                            '目標',
+                            '年齡',
+                            '性別'
+                        ]
+                    )
+
+                    try:
+                        analysis_result = analysis_agent.analyze_image_sync(
+                            image=image,
+                            df=analysis_df,
+                            brand_context=brand_context,
+                            openai_client=openai_client
+                        )
+                    except Exception as exc:
+                        st.error(f"❌ 圖片分析失敗：{exc}")
+                        import traceback
+                        with st.expander("🔍 錯誤詳情"):
+                            st.code(traceback.format_exc())
+                        st.stop()
+
+                    # 儲存分析結果到 session state
+                    st.session_state['image_analysis'] = analysis_result
+                    st.session_state['analyzed_image_key'] = image_key
+                    st.success("✅ 分析完成！")
+                    st.rerun()
 
         # 顯示分析結果
-        if 'image_analysis' in st.session_state and st.session_state.get('analyzed_image') == image:
-            analysis = st.session_state['image_analysis']
+        if 'image_analysis' in st.session_state and st.session_state.get('analyzed_image_key') == image_key:
+            analysis_result: ImageAnalysisResult = st.session_state['image_analysis']
+            analysis_dict = analysis_result.model_dump()
+            scores = analysis_dict.get('scores', {})
+            detailed_analysis = analysis_dict.get('detailed_analysis', {})
+            strengths = analysis_result.strengths
+            weaknesses = analysis_result.weaknesses
 
             st.divider()
 
             # 總體評分
             st.subheader("📊 總體評分")
-            overall_score = analysis.get('overall_score', 0)
+            overall_score = analysis_result.overall_score
 
             col1, col2, col3 = st.columns([2, 1, 1])
             with col1:
@@ -431,27 +324,24 @@ def main():
                 """, unsafe_allow_html=True)
 
             with col2:
-                is_suitable = analysis.get('is_suitable_for_ads', False)
+                is_suitable = analysis_result.is_suitable_for_ads
                 st.metric(
                     "投放適配性",
                     "✅ 適合" if is_suitable else "⚠️ 不建議"
                 )
 
             with col3:
-                strengths_count = len(analysis.get('strengths', []))
-                weaknesses_count = len(analysis.get('weaknesses', []))
+                strengths_count = len(strengths)
+                weaknesses_count = len(weaknesses)
                 st.metric("優點", strengths_count, delta=f"-{weaknesses_count} 缺點", delta_color="inverse")
 
             # 適配性說明
-            st.info(f"💡 {analysis.get('suitability_reason', '無說明')}")
+            st.info(f"💡 {analysis_result.suitability_reason or '無說明'}")
 
             st.divider()
 
             # 詳細評分
             st.subheader("📈 詳細評分")
-
-            scores = analysis.get('scores', {})
-            detailed_analysis = analysis.get('detailed_analysis', {})
 
             score_labels = {
                 'visual_appeal': '視覺吸引力',
@@ -504,7 +394,6 @@ def main():
 
             with col1:
                 st.subheader("✅ 優點")
-                strengths = analysis.get('strengths', [])
                 if strengths:
                     for strength in strengths:
                         st.success(f"✓ {strength}")
@@ -513,7 +402,6 @@ def main():
 
             with col2:
                 st.subheader("⚠️ 缺點")
-                weaknesses = analysis.get('weaknesses', [])
                 if weaknesses:
                     for weakness in weaknesses:
                         st.warning(f"• {weakness}")
@@ -524,7 +412,7 @@ def main():
 
             # 優化建議
             st.subheader("💡 優化建議")
-            suggestions = analysis.get('optimization_suggestions', [])
+            suggestions = analysis_result.optimization_suggestions
 
             if suggestions:
                 for i, suggestion in enumerate(suggestions, 1):
@@ -533,8 +421,18 @@ def main():
                 st.info("無需優化")
 
             # 目標受眾建議
-            if 'target_audience_recommendation' in analysis:
-                st.info(f"🎯 **建議目標受眾**：{analysis['target_audience_recommendation']}")
+            if analysis_result.target_audience_recommendation:
+                st.info(f"🎯 **建議目標受眾**：{analysis_result.target_audience_recommendation}")
+
+            if analysis_result.optimization_prompt:
+                with st.expander("🪄 AI 建議的優化提示詞", expanded=False):
+                    st.text_area(
+                        "優化提示詞",
+                        analysis_result.optimization_prompt,
+                        height=200,
+                        disabled=True,
+                        label_visibility="collapsed"
+                    )
 
             st.divider()
 
@@ -552,8 +450,7 @@ def main():
             if st.button("🚀 生成優化圖片", type="primary", use_container_width=True):
                 with st.spinner("AI 正在生成優化圖片，請稍候（約 10-30 秒）..."):
                     optimized_image_data, optimization_prompt = generate_optimized_image(
-                        analysis,
-                        client,
+                        analysis_result,
                         image_size_option
                     )
 

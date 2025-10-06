@@ -30,7 +30,7 @@ OPENAI_API_KEY=your-key-here
 可選進階設定（未指定時將使用預設值）：
 ```
 # 指定要呼叫的 OpenAI 模型
-OPENAI_MODEL=gpt-4o-mini
+OPENAI_MODEL=gpt-5-nano
 
 # LLM 回應快取秒數（降低成本與延遲）
 CACHE_TTL=3600
@@ -41,7 +41,7 @@ CACHE_TTL=3600
 - `ENABLE_AI_IMAGE_GENERATION=true`：顯示「🤖 AI 素材製作首頁」「🎨 AI 圖片生成」「🧠 智能素材優化」
 - `ENABLE_PERFORMANCE_PREDICTION=true`：顯示「⚡ 即時優化建議」「🎯 智能投放策略」
 
-> 圖片生成：若已設定 `GEMINI_API_KEY`（可再透過 `GEMINI_IMAGE_MODEL` 指定模型，預設為 `gemini-2.5-flash-image`），系統會優先使用 Gemini nano-banana；未設定或生成失敗時會自動退回 OpenAI DALL·E 3。
+> 圖片生成：請在 `.env` 設定 `GEMINI_API_KEY`（可透過 `GEMINI_IMAGE_MODEL` 指定模型，預設為 `gemini-2.5-flash-image`），系統將固定使用 Gemini 2.5 Flash Image (nano-banana) 生成圖片。
 
 常見錯誤排查：
 - `⚠️ 尚未設定 OPENAI_API_KEY` → 請在 `.env` 中填入有效金鑰
@@ -73,7 +73,7 @@ CACHE_TTL=3600
 | **多變量測試** 🆕 | MVT 優化 | 因子分析、最佳組合預測 |
 | **智能 Agent 巡檢** | 每日自動檢查 | 異常偵測、機會識別 |
 | **對話式助手** | 自然語言查詢 | RAG 增強回答 |
-| **AI 素材工具** | 文案/圖片生成 | Gemini nano-banana／DALL-E 3、GPT-4o-mini |
+| **AI 素材工具** | 文案/圖片生成 | Gemini 2.5 Flash Image、GPT-4o-mini |
 
 ### 📊 24 個分析頁面
 
@@ -150,7 +150,7 @@ CACHE_TTL=3600
 - **前端**：Streamlit
 - **數據處理**：Pandas、NumPy
 - **視覺化**：Plotly
-- **AI 模型**：Gemini nano-banana（優先）、OpenAI DALL-E 3（備援）、GPT-4o-mini
+- **AI 模型**：Gemini 2.5 Flash Image（圖片）、GPT-4o-mini（文字）
 - **RAG**：LangChain + ChromaDB
 - **Agent**：Pydantic AI
 

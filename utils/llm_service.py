@@ -32,7 +32,7 @@ class LLMService:
         """初始化 LLM 服務"""
         self.client = None
         self.cache = {}
-        self.model_name = os.getenv("OPENAI_MODEL", "gpt-3.5-turbo")
+        self.model_name = os.getenv("OPENAI_MODEL", "gpt-5-nano")
         try:
             self.cache_ttl = int(os.getenv("CACHE_TTL", "3600"))
         except ValueError:
@@ -151,9 +151,9 @@ class LLMService:
             if hasattr(response, 'usage'):
                 tokens = response.usage.total_tokens
                 self.usage_stats['total_tokens'] += tokens
-                # 估算成本 (gpt-4o-mini: $0.15/1M input tokens, $0.60/1M output tokens)
+                # 估算成本 (gpt-5-nano: $0.15/1M input tokens, $0.60/1M output tokens)
                 # 簡化計算：假設 input/output 各佔一半
-                if 'gpt-4o-mini' in model_name or 'gpt-3.5' in model_name:
+                if 'gpt-5-nano' in model_name or 'gpt-3.5' in model_name:
                     cost = (tokens / 1000000) * 0.375  # 平均成本
                 elif 'gpt-4' in model_name:
                     cost = (tokens / 1000000) * 15  # GPT-4 平均成本

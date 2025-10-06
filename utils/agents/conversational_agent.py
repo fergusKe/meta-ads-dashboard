@@ -72,8 +72,11 @@ class ConversationalAdAgent:
 
     def __init__(self):
         """初始化 Agent"""
+        # 從 .env 讀取模型名稱
+        model_name = os.getenv('OPENAI_MODEL', 'gpt-5-nano')
+
         self.agent = Agent(
-            'openai:gpt-4o-mini',
+            f'openai:{model_name}',
             output_type=AgentResponse,
             deps_type=ConversationalDeps,
             system_prompt=self._get_system_prompt()

@@ -1,12 +1,10 @@
 import streamlit as st
 import pandas as pd
-import numpy as np
+from typing import Any
 import plotly.express as px
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
-from datetime import datetime, timedelta
-from openai import OpenAI
-import os
+from utils.agents import StrategyAgent, StrategyAgentResult
 from utils.data_loader import load_meta_ads_data
 
 st.set_page_config(page_title="智能投放策略", page_icon="🎯", layout="wide")
@@ -155,68 +153,60 @@ def recommend_target_audiences(df):
 
     return audience_analysis
 
-def generate_targeted_content_strategy(top_ads, audience_recommendations):
-    """基於最佳廣告和受眾生成內容策略"""
+@st.cache_resource
+def get_strategy_agent() -> StrategyAgent | None:
+    """Create and cache StrategyAgent."""
     try:
-        api_key = os.getenv('OPENAI_API_KEY')
-        if not api_key:
-            return "無法連接 OpenAI API，請檢查 API 設定"
+        return StrategyAgent()
+    except Exception as exc:  # pragma: no cover - 顯示於 UI
+        st.error(f"❌ 無法初始化 StrategyAgent：{exc}")
+        return None
 
-        client = OpenAI(api_key=api_key)
 
-        # 準備分析摘要
-        top_ad_summary = ""
-        if top_ads and 'top_campaigns' in top_ads:
-            for i, ad in enumerate(top_ads['top_campaigns'][:3], 1):
-                top_ad_summary += f"""
-{i}. 活動：{ad.get('行銷活動名稱', '未知')}
-   - 目標受眾：{ad.get('年齡', '未知')} {ad.get('性別', '未知')}
-   - ROAS：{ad.get('購買 ROAS（廣告投資報酬率）', 0):.2f}
-   - CTR：{ad.get('CTR（全部）', 0):.3f}%
-   - 轉換率：{ad.get('轉換率', 0):.2f}%
-"""
+def render_strategy_result(result: StrategyAgentResult) -> None:
+    """Render StrategyAgent output in Streamlit."""
+    st.subheader('🧭 策略總覽')
+    st.info(result.executive_summary)
+    st.caption(f"規劃期間：{result.horizon}")
 
-        audience_summary = ""
-        if audience_recommendations:
-            audience_summary = f"""
-最佳年齡層：{audience_recommendations.get('best_age', '未知')}
-最佳性別：{audience_recommendations.get('best_gender', '未知')}
-最佳目標類型：{audience_recommendations.get('best_objective', '未知')}
-"""
+    st.markdown('### 🏛️ 策略主軸')
+    for idx, pillar in enumerate(result.strategic_pillars, start=1):
+        header = f"{idx}. {pillar.name} — {pillar.objective}"
+        with st.expander(header, expanded=(idx == 1)):
+            if pillar.key_results:
+                st.markdown('**關鍵成果指標**：')
+                for kr in pillar.key_results:
+                    st.markdown(f"- {kr}")
+            if pillar.tactical_moves:
+                st.markdown('**戰術建議**：')
+                for move in pillar.tactical_moves:
+                    st.markdown(f"- {move}")
 
-        prompt = f"""
-作為耘初茶食的廣告策略專家，請基於以下數據分析，提供具體的投放策略建議：
-
-表現最佳的廣告分析：
-{top_ad_summary}
-
-受眾分析結果：
-{audience_summary}
-
-請提供：
-1. 下一波廣告投放的受眾建議（年齡、性別、興趣）
-2. 針對該受眾的文案方向建議（3個不同角度）
-3. 視覺設計建議（圖片風格、色調、元素）
-4. 預算分配建議
-5. 投放時機建議
-
-要求簡潔實用，每個建議不超過50字。
-"""
-
-        response = client.chat.completions.create(
-            model="gpt-3.5-turbo",
-            messages=[
-                {"role": "system", "content": "你是專業的數位廣告策略顧問，專精於Meta廣告投放策略。"},
-                {"role": "user", "content": prompt}
-            ],
-            max_tokens=1000,
-            temperature=0.7
+    if result.budget_allocation:
+        st.markdown('### 💰 預算配置建議')
+        budget_df = pd.DataFrame(
+            [
+                {'項目': name, '建議比重/金額': value}
+                for name, value in result.budget_allocation.items()
+            ]
         )
+        st.dataframe(budget_df, hide_index=True, use_container_width=True)
 
-        return response.choices[0].message.content
+    if result.audience_strategy:
+        st.markdown('### 👥 受眾策略')
+        for item in result.audience_strategy:
+            st.markdown(f"- {item}")
 
-    except Exception as e:
-        return f"策略生成失敗：{str(e)}"
+    if result.creative_strategy:
+        st.markdown('### 🎨 創意策略')
+        for item in result.creative_strategy:
+            st.markdown(f"- {item}")
+
+    if result.measurement_plan:
+        st.markdown('### 📏 衡量與回顧節奏')
+        for step in result.measurement_plan:
+            st.markdown(f"- {step}")
+
 
 def create_performance_comparison_chart(df):
     """創建表現對比圖表"""
@@ -605,12 +595,112 @@ def main():
     # AI 投放策略建議
     st.header("🤖 AI 投放策略建議")
 
-    with st.spinner("AI 正在分析數據並生成投放策略..."):
-        ai_strategy = generate_targeted_content_strategy(top_ads_analysis, audience_recommendations)
+    st.markdown("### 🎯 目標設定")
+    goal_col1, goal_col2 = st.columns(2)
+    with goal_col1:
+        planning_horizon = st.selectbox(
+            '規劃期間',
+            ['未來 4 週', '本季 (12 週)', '下季 (12 週)'],
+            index=0
+        )
+        revenue_target = st.number_input(
+            '營收 / 轉換目標 (TWD)',
+            min_value=0,
+            value=500000,
+            step=50000
+        )
+    with goal_col2:
+        primary_goal = st.text_input('主要商業目標', value='提升線上營收與回購')
+        primary_metric = st.selectbox('核心 KPI', ['ROAS', 'CTR', 'CPA', '轉換次數'], index=0)
 
-    if ai_strategy:
-        st.markdown("### 🎯 個人化投放策略")
-        st.markdown(ai_strategy)
+    total_budget = st.number_input(
+        '可用投放預算 (TWD)',
+        min_value=0,
+        value=200000,
+        step=20000
+    )
+
+    st.markdown('### 📓 市場與限制備註')
+    notes_input = st.text_area(
+        '市場訊號 / 活動重點（每行一筆，可留空）',
+        placeholder='例如：母親節檔期預計 5/1 開跑\n競品近期主打免運'
+    )
+    inventory_input = st.text_area(
+        '庫存或投放限制',
+        placeholder='例如：旗艦商品僅剩 500 組；週末不投放'
+    )
+
+    notes_list = [line.strip() for line in notes_input.splitlines() if line.strip()]
+    inventory_notes = [line.strip() for line in inventory_input.splitlines() if line.strip()]
+
+    audience_payload: dict[str, Any] = {
+        'best_age': audience_recommendations.get('best_age'),
+        'best_gender': audience_recommendations.get('best_gender'),
+        'best_objective': audience_recommendations.get('best_objective'),
+    }
+    full_combo = audience_recommendations.get('full_combo_performance')
+    if isinstance(full_combo, pd.DataFrame) and not full_combo.empty:
+        top_full = full_combo.sort_values('購買 ROAS（廣告投資報酬率）', ascending=False).head(5)
+        audience_payload['top_combinations'] = [
+            {
+                '年齡': str(idx[0]),
+                '性別': str(idx[1]),
+                '目標': str(idx[2]),
+                'roas': float(row['購買 ROAS（廣告投資報酬率）']),
+                'ctr': float(row['CTR（全部）']),
+                'cpa': float(row['每次購買的成本'])
+            }
+            for idx, row in top_full.iterrows()
+        ]
+
+    market_forecast = {'signals': notes_list} if notes_list else None
+    inventory_constraints = {'items': inventory_notes} if inventory_notes else None
+
+    run_strategy_agent = st.button('🚀 啟動 StrategyAgent', type='primary')
+
+    if run_strategy_agent:
+        agent = get_strategy_agent()
+        if agent is None:
+            st.stop()
+
+        business_goals = {
+            'primary_goal': primary_goal,
+            'kpi': primary_metric,
+            'revenue_target': revenue_target,
+        }
+
+        top_ads_records = top_ads_analysis.get('top_campaigns', []) if top_ads_analysis else []
+
+        with st.spinner('AI 正在整合數據並生成策略...'):
+            try:
+                result = agent.craft_strategy_sync(
+                    df=df,
+                    top_ads=top_ads_records,
+                    audience_insights=audience_payload,
+                    business_goals=business_goals,
+                    planning_horizon=planning_horizon,
+                    total_budget=total_budget,
+                    market_forecast=market_forecast,
+                    inventory_constraints=inventory_constraints,
+                    notes=notes_list,
+                )
+                st.session_state['strategy_agent_result'] = result
+                st.session_state['strategy_agent_generated_at'] = pd.Timestamp.now()
+                st.success('✅ 已生成智能投放策略')
+            except Exception as exc:
+                st.error(f'❌ 策略生成失敗：{exc}')
+                import traceback
+                with st.expander('🔍 錯誤詳情'):
+                    st.code(traceback.format_exc())
+
+    strategy_result: StrategyAgentResult | None = st.session_state.get('strategy_agent_result')
+    if strategy_result:
+        generated_at = st.session_state.get('strategy_agent_generated_at')
+        if generated_at:
+            st.caption(f"最後更新時間：{generated_at.strftime('%Y-%m-%d %H:%M:%S')}")
+        render_strategy_result(strategy_result)
+    else:
+        st.info('填寫目標與預算後，點擊按鈕即可取得完整投放策略。')
 
     # 實用工具
     st.header("🛠️ 實用投放工具")

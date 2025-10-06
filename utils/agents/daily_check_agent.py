@@ -108,9 +108,12 @@ class DailyCheckAgent:
 
     def __init__(self):
         """初始化 Agent"""
-        # 創建 Agent（使用 OpenAI GPT-4）
+        # 從 .env 讀取模型名稱
+        model_name = os.getenv('OPENAI_MODEL', 'gpt-5-nano')
+
+        # 創建 Agent
         self.agent = Agent(
-            'openai:gpt-4o-mini',  # 使用 gpt-4o-mini 節省成本
+            f'openai:{model_name}',
             output_type=DailyCheckResult,
             deps_type=DailyCheckDeps,
             system_prompt=self._get_system_prompt()

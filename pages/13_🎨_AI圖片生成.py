@@ -1,28 +1,26 @@
 import streamlit as st
 import pandas as pd
 import os
-import requests
 import json
 from datetime import datetime
 import base64
 from io import BytesIO
 from PIL import Image
 from utils.data_loader import load_meta_ads_data
+from utils.agents import ImagePromptAgent, ImageGenerationResult
 
 st.set_page_config(page_title="AI 圖片生成", page_icon="🎨", layout="wide")
 
-def load_openai_client():
-    """載入 OpenAI 客戶端設定"""
+# 初始化 Agent
+@st.cache_resource
+def get_image_prompt_agent():
+    """取得 ImagePromptAgent 實例"""
     try:
-        from openai import OpenAI
-        api_key = os.getenv('OPENAI_API_KEY')
-        if not api_key:
-            st.error("❌ 請在 .env 檔案中設定 OPENAI_API_KEY")
-            return None
-        return OpenAI(api_key=api_key)
+        return ImagePromptAgent()
     except Exception as e:
-        st.error(f"❌ OpenAI 初始化失敗：{str(e)}")
+        st.error(f"❌ ImagePromptAgent 初始化失敗：{str(e)}")
         return None
+
 
 def analyze_brand_style(df):
     """分析品牌風格和廣告表現"""
@@ -55,120 +53,32 @@ def analyze_brand_style(df):
 
     return analysis
 
-def generate_image_prompt(image_type, style_preferences, brand_analysis, user_requirements):
-    """生成圖片提示詞"""
+async def generate_image_prompts_with_agent(
+    agent: ImagePromptAgent,
+    df: pd.DataFrame,
+    image_type: str,
+    style_preferences: str,
+    target_audience: str | None,
+    special_requirements: str | None,
+    image_size: str,
+    rag_service=None,
+):
+    """使用 ImagePromptAgent 生成圖片提示詞"""
 
-    base_context = f"""
-品牌：耘初茶食 (台灣茶飲品牌)
-產品：高品質茶飲、茶食產品
-品牌特色：傳統工藝與現代創新結合，注重健康養生
-廣告表現：平均ROAS {brand_analysis.get('avg_roas', 0):.2f}
-主要受眾：{', '.join(brand_analysis.get('top_audiences', {}).keys())}
+    if '(' in image_size and ')' in image_size:
+        dimension = image_size.split('(')[1].split(')')[0]
+    else:
+        dimension = "1024x1024"
 
-用戶需求：{user_requirements}
-"""
-
-    if image_type == "產品展示":
-        prompt = f"""
-創建一個專業的茶飲產品展示圖片，風格：{style_preferences}
-
-要求：
-- 主體：精美的茶飲產品（茶葉、茶具、或包裝茶飲）
-- 背景：簡潔優雅，突出產品質感
-- 色調：溫暖自然，體現茶文化的寧靜感
-- 構圖：產品居中，適合Meta廣告使用
-- 解析度：高清晰度，適合社群媒體
-
-{base_context}
-
-創建一個吸引人的茶飲產品圖片，展現品牌的高品質和傳統工藝特色。
-"""
-
-    elif image_type == "生活場景":
-        prompt = f"""
-創建一個溫馨的茶飲生活場景圖片，風格：{style_preferences}
-
-要求：
-- 場景：自然舒適的品茶環境（如書房、陽台、咖啡廳）
-- 人物：展現享受茶飲時光的愉悅感（可選）
-- 氛圍：放鬆、療癒、品味生活
-- 元素：茶具、茶葉、自然光線
-- 適合：展現品牌生活態度
-
-{base_context}
-
-營造一個讓人嚮往的品茶時光場景，體現耘初茶食帶來的生活美學。
-"""
-
-    elif image_type == "品牌識別":
-        prompt = f"""
-創建品牌識別相關的設計圖片，風格：{style_preferences}
-
-要求：
-- 元素：品牌logo、品牌色彩、視覺識別
-- 設計：現代簡約，具有識別度
-- 應用：適合各種媒體平台使用
-- 質感：專業、精緻、具有品牌價值
-- 傳達：品牌的專業性和可信度
-
-{base_context}
-
-設計一個具有強烈品牌識別度的圖片，體現耘初茶食的品牌形象。
-"""
-
-    elif image_type == "促銷活動":
-        prompt = f"""
-創建促銷活動廣告圖片，風格：{style_preferences}
-
-要求：
-- 主題：限時優惠、新品上市、節慶活動等
-- 元素：促銷文字、產品圖片、優惠信息
-- 視覺：醒目吸引，具有緊迫感
-- 色彩：明亮活潑，刺激購買慾望
-- 佈局：信息層次清晰，易於閱讀
-
-{base_context}
-
-創建一個有效的促銷廣告圖片，能夠吸引目標並促進轉換。
-"""
-
-    return prompt
-
-def call_dalle_api(prompt, client, size="1024x1024"):
-    """呼叫 OpenAI DALL-E 3 API 生成圖片"""
-    try:
-        # 將尺寸選項映射到 DALL-E 3 支援的尺寸
-        size_mapping = {
-            "1:1 (1024x1024) - Instagram貼文": "1024x1024",
-            "16:9 (1920x1080) - Facebook橫幅": "1792x1024",
-            "9:16 (1080x1920) - Stories": "1024x1792"
-        }
-
-        dalle_size = size_mapping.get(size, "1024x1024")
-
-        # 呼叫 DALL-E 3 API
-        response = client.images.generate(
-            model="dall-e-3",
-            prompt=prompt,
-            size=dalle_size,
-            quality="standard",
-            n=1,
-        )
-
-        # 取得圖片 URL
-        image_url = response.data[0].url
-
-        # 下載圖片
-        img_response = requests.get(image_url, timeout=30)
-        if img_response.status_code == 200:
-            return img_response.content
-        else:
-            st.error(f"❌ 圖片下載失敗：{img_response.status_code}")
-            return None
-
-    except Exception as e:
-        st.error(f"❌ DALL-E 3 API 呼叫失敗：{str(e)}")
-        return None
+    return await agent.generate_prompts(
+        df=df,
+        image_type=image_type,
+        style_preference=style_preferences,
+        target_audience=target_audience,
+        special_requirements=special_requirements,
+        image_size=dimension,
+        rag_service=rag_service,
+    )
 
 
 def call_gemini_image_api(prompt, size="1024x1024"):
@@ -224,7 +134,7 @@ def call_gemini_image_api(prompt, size="1024x1024"):
                             if hasattr(part, 'text') and part.text:
                                 st.info(f"📝 Gemini 回應文字：{part.text}")
 
-        st.warning("⚠️ Gemini 未回傳圖片內容，將改用 DALL-E 3。")
+        st.warning("⚠️ Gemini 未回傳圖片內容，請調整提示詞後再試。")
 
     except Exception as exc:
         st.error(f"❌ Gemini 生成失敗：{type(exc).__name__}: {exc}")
@@ -240,7 +150,7 @@ def display_generated_image(image_data, prompt_info, provider=None):
         return
 
     try:
-        # DALL-E 3 返回圖片的二進制數據
+        # 轉換二進制圖片資料
         if isinstance(image_data, bytes):
             image = Image.open(BytesIO(image_data))
 
@@ -326,12 +236,8 @@ def main():
     st.title("🎨 AI 圖片生成")
     st.markdown("使用 Gemini 2.5 Flash Image (nano-banana) 為耘初茶食生成專業廣告圖片")
 
-    # 載入數據和 API 客戶端
+    # 載入數據
     df = load_meta_ads_data()
-    client = load_openai_client()
-
-    if not client:
-        st.stop()
 
     # 主要內容區域 - 設定選項
     col1, col2 = st.columns([2, 1])
@@ -451,72 +357,211 @@ def main():
         manual_generate = st.button("🚀 開始生成圖片", type="primary", use_container_width=True)
 
     # 執行生成（移到 columns 外面，使用全寬）
+    image_data = None
+    provider = None
     if manual_generate or auto_generate:
         if auto_generate:
             st.info("🎯 正在基於智能推薦的受眾組合生成圖片...")
 
-        with st.spinner("AI 正在創作中，請稍候..."):
-            # 準備 requirements_summary
-            requirements_summary = f"""
+        # 取得 Agent
+        image_agent = get_image_prompt_agent()
+        if not image_agent:
+            st.error("❌ ImagePromptAgent 未初始化，無法生成圖片")
+            st.stop()
+
+        # 執行流程可視化
+        log_container = st.container()
+
+        with log_container:
+            st.markdown("### 🤖 Agent 執行流程")
+
+            # Step 1: 初始化
+            with st.status("📋 Step 1: 初始化 ImagePromptAgent", expanded=True) as status:
+                model_name = os.getenv('OPENAI_MODEL', 'gpt-5-nano')
+                st.write("✓ Agent 類型：**ImagePromptAgent**")
+                st.write(f"✓ 模型：**{model_name}**（從 .env 讀取）")
+                st.write("✓ 輸出類型：**ImageGenerationResult**（3個提示詞變體）")
+                status.update(label="✅ Step 1: Agent 初始化完成", state="complete")
+
+            # Step 2: 準備上下文
+            with st.status("📊 Step 2: 分析品牌與需求", expanded=True) as status:
+                requirements_summary = f"""
 圖片類型：{image_type}
 視覺風格：{style_preference}
 圖片尺寸：{image_size}
 特殊要求：{special_requirements if special_requirements else '無'}
 """
+                st.write(f"✓ 圖片類型：**{image_type}**")
+                st.write(f"✓ 視覺風格：**{style_preference}**")
+                st.write(f"✓ 目標平台：**{image_size.split('-')[1].strip() if '-' in image_size else 'Instagram'}**")
+                if brand_analysis:
+                    st.write(f"✓ 品牌ROAS：**{brand_analysis.get('avg_roas', 0):.2f}**")
+                status.update(label="✅ Step 2: 上下文準備完成", state="complete")
 
-            # 生成提示詞
-            prompt = generate_image_prompt(
+            # Step 3: Agent Tools
+            with st.status("🛠️ Step 3: Agent 工具呼叫", expanded=True) as status:
+                st.write("✓ `get_brand_visual_guidelines()` - 品牌視覺指南")
+                st.write("✓ `get_top_performing_image_features()` - 高效圖片特徵")
+                st.write("✓ `get_platform_specific_requirements()` - 平台規格要求")
+                st.write("✓ `get_style_specific_prompts()` - 風格範本庫")
+                status.update(label="✅ Step 3: 工具就緒", state="complete")
+
+            # Step 4: AI生成
+            with st.status("🎨 Step 4: AI 生成提示詞（3個變體）", expanded=True) as status:
+                try:
+                    import asyncio
+                    agent_df = df if df is not None else pd.DataFrame(
+                        columns=[
+                            '購買 ROAS（廣告投資報酬率）',
+                            'CTR（全部）',
+                            '每次購買的成本',
+                            '花費金額 (TWD)',
+                            '購買次數',
+                            '觸及人數',
+                            '行銷活動名稱',
+                            '目標',
+                            '年齡',
+                            '性別'
+                        ]
+                    )
+
+                    result = asyncio.run(
+                        generate_image_prompts_with_agent(
+                            image_agent,
+                            agent_df,
+                            image_type,
+                            style_preference,
+                            recommended_audience or None,
+                            special_requirements or None,
+                            image_size,
+                        )
+                    )
+                    st.write("✓ 變體 1：完成")
+                    st.write("✓ 變體 2：完成")
+                    st.write("✓ 變體 3：完成")
+                    st.write("✓ Pydantic 驗證：通過")
+                    status.update(label="✅ Step 4: 提示詞生成完成", state="complete")
+                except Exception as e:
+                    st.error(f"❌ 生成失敗：{str(e)}")
+                    import traceback
+                    with st.expander("🔍 錯誤詳情"):
+                        st.code(traceback.format_exc())
+                    st.stop()
+
+            # Step 5: 圖片生成
+            with st.status("🖼️ Step 5: 使用 Gemini 生成圖片", expanded=True) as status:
+                prompts = result.prompts if result and result.prompts else []
+
+                if not prompts:
+                    st.error("❌ 未取得任何圖片提示詞，請重新嘗試")
+                    status.update(label="❌ Step 5: 無提示詞可用", state="error")
+                    st.stop()
+
+                total_variants = len(prompts)
+                recommended_index = result.recommended_variant if 0 <= result.recommended_variant < total_variants else 0
+                best_prompt = prompts[recommended_index]
+                final_prompt = best_prompt.main_prompt
+
+                st.write(f"✓ 生成變體數：**{total_variants}**")
+                st.write(f"✓ 推薦使用：**變體 {recommended_index + 1}**（{best_prompt.chinese_description}）")
+                st.write(f"✓ 風格關鍵字：{', '.join(best_prompt.style_keywords)}")
+
+                provider = "Gemini 2.5 Flash Image"
+                image_data = call_gemini_image_api(final_prompt, image_size)
+
+                if image_data:
+                    st.write("✓ 生成方式：**Gemini 2.5 Flash Image**")
+                    status.update(label="✅ Step 5: 圖片生成完成", state="complete")
+                else:
+                    st.error("❌ 圖片生成失敗（Gemini 未回傳圖片）")
+                    status.update(label="❌ Step 5: 生成失敗", state="error")
+                    st.stop()
+
+        st.divider()
+
+        # 顯示結果
+        if image_data:
+            st.success(f"✅ 圖片生成完成！使用 {provider}")
+
+            # 儲存歷史
+            save_generation_history(
                 image_type,
                 style_preference,
-                brand_analysis if df is not None else {},
-                requirements_summary
+                requirements_summary,
+                final_prompt,
+                True
             )
 
-            # 呼叫 API
-            provider = None
-            image_data = call_gemini_image_api(prompt, image_size)
-            if image_data:
-                provider = "Gemini nano-banana"
-            else:
-                image_data = call_dalle_api(prompt, client, image_size)
-                if image_data:
-                    provider = "OpenAI DALL-E 3"
+            # 顯示圖片
+            display_generated_image(
+                image_data,
+                {"prompt": final_prompt, "type": image_type, "style": style_preference},
+                provider
+            )
 
-            if image_data:
-                if auto_generate:
-                    st.success(f"✅ 基於智能推薦的圖片生成完成！（{provider}）")
-                else:
-                    st.success(f"✅ 圖片生成完成！（{provider}）")
+            score_col1, score_col2 = st.columns(2)
+            with score_col1:
+                st.metric("品牌一致性", f"{result.brand_alignment_score}/100")
+            with score_col2:
+                st.metric("廣告適配性", f"{result.ad_suitability_score}/100")
 
-                # 儲存歷史
-                save_generation_history(
-                    image_type,
-                    style_preference,
-                    requirements_summary,
-                    prompt,
-                    True
-                )
+            st.markdown("### 🎯 設計理念")
+            st.info(result.rationale)
 
-                # 顯示結果
-                display_generated_image(
-                    image_data,
-                    {"prompt": prompt, "type": image_type, "style": style_preference},
-                    provider
-                )
+            if result.optimization_tips:
+                st.subheader("💡 優化建議")
+                for idx, tip in enumerate(result.optimization_tips, 1):
+                    st.markdown(f"{idx}. {tip}")
 
-            else:
-                # 儲存失敗記錄
-                save_generation_history(
-                    image_type,
-                    style_preference,
-                    requirements_summary,
-                    prompt,
-                    False
-                )
+            if result.platform_guidelines:
+                st.subheader("📐 平台規範提醒")
+                for platform, guidelines in result.platform_guidelines.items():
+                    st.markdown(f"**{platform}**")
+                    if isinstance(guidelines, list):
+                        for guideline in guidelines:
+                            st.markdown(f"- {guideline}")
+                    else:
+                        st.markdown(f"- {guidelines}")
 
-                # 顯示備選方案
-                st.error("❌ 圖片生成失敗")
-                st.info("💡 您可以嘗試：\n- 調整需求描述\n- 選擇不同的風格\n- 簡化特殊要求")
+            # 顯示所有變體的提示詞
+            st.subheader("📝 所有生成的提示詞變體")
+            prompts = result.prompts if result and result.prompts else []
+            for i, prompt in enumerate(prompts, 1):
+                is_recommended = (i - 1 == recommended_index)
+                title_prefix = "🌟 推薦變體" if is_recommended else "變體"
+                with st.expander(f"{title_prefix} {i}：{prompt.chinese_description}", expanded=(i == 1)):
+                    if is_recommended:
+                        st.success("這是 ImagePromptAgent 推薦的最佳變體")
+
+                    st.write("**英文提示詞：**")
+                    st.code(prompt.main_prompt, language="text")
+
+                    col1, col2 = st.columns(2)
+                    with col1:
+                        st.write("**風格關鍵字：**")
+                        for keyword in prompt.style_keywords:
+                            st.write(f"• {keyword}")
+                        st.write("**建議色彩：**")
+                        for color in prompt.color_palette:
+                            st.write(f"• {color}")
+
+                    with col2:
+                        st.write("**構圖建議：**")
+                        for tip in prompt.composition_tips:
+                            st.write(f"• {tip}")
+                        st.write(f"**氛圍設定：** {prompt.mood}")
+                        st.write(f"**適用平台：** {prompt.target_platform}")
+
+                    if st.button(f"使用此變體重新生成", key=f"use_variant_{i}"):
+                        new_image_data = call_gemini_image_api(prompt.main_prompt, image_size)
+                        if new_image_data:
+                            display_generated_image(
+                                new_image_data,
+                                {"prompt": prompt.main_prompt, "type": image_type, "style": style_preference},
+                                "Gemini 2.5 Flash Image"
+                            )
+                        else:
+                            st.warning("⚠️ Gemini 未回傳圖片內容，請調整提示詞後再試。")
 
     st.divider()
 

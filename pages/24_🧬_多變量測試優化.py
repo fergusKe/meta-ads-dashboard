@@ -2,13 +2,11 @@ import streamlit as st
 import pandas as pd
 import numpy as np
 import itertools
-from scipy import stats
 import plotly.express as px
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
-from utils.llm_service import get_llm_service
+from utils.agents import MVTDesignAgent, MVTDesignResult
 from utils.data_loader import load_meta_ads_data
-import json
 
 st.set_page_config(page_title="多變量測試優化", page_icon="🧬", layout="wide")
 
@@ -64,138 +62,6 @@ def calculate_factorial_effects(results_df, variables):
 
     return effects
 
-def analyze_mvt_with_ai(test_objective, variables, num_combinations, expected_traffic):
-    """使用 AI 分析 MVT 設計並提供建議"""
-    llm_service = get_llm_service()
-
-    if not llm_service.is_available():
-        return "❌ AI 功能目前無法使用，請設定 OPENAI_API_KEY"
-
-    # 構建 Prompt
-    prompt = f"""
-你是專業的多變量測試（MVT）設計專家。請針對以下測試需求提供 MVT 設計建議。
-
-## 測試目標
-{test_objective}
-
-## 測試變數
-{json.dumps(variables, ensure_ascii=False, indent=2)}
-
-## 測試規模
-- **總組合數**：{num_combinations}
-- **預期每日流量**：{expected_traffic}
-
-## 請提供以下內容：
-
-### 1. 🎯 MVT 策略建議
-
-**是否適合 MVT**：
-- 分析當前變數組合是否適合多變量測試
-- 如果不適合，建議改用 A/B 測試或序列測試
-- 理由說明
-
-**測試複雜度評估**：
-- 🟢 簡單（2-3 個變數，<10 組合）
-- 🟡 中等（3-4 個變數，10-20 組合）
-- 🔴 複雜（>4 個變數，>20 組合）
-
-### 2. 📊 樣本分配建議
-
-**流量分配策略**：
-- 均等分配 vs 不均等分配
-- 控制組分配比例
-- 各變體建議流量
-
-**所需時間估算**：
-- 最小測試時間（達到統計顯著性）
-- 建議測試時間（考慮週期效應）
-- 風險評估（流量不足、時間過長）
-
-### 3. 🔬 因子分析計畫
-
-**主效應分析**：
-- 哪些變數可能有最大影響
-- 優先觀察指標
-- 如何解讀主效應
-
-**交互效應分析**：
-- 可能存在的交互作用
-- 例如：標題 A + 圖片 B 的組合效果 > 單獨效果
-- 如何識別交互效應
-
-**護欄指標**：
-- 哪些指標不能惡化
-- 異常值處理
-- 提前停止條件
-
-### 4. 💡 優化建議（3-5 個）
-
-**簡化測試**：
-- 如何減少變體數量但保持洞察
-- 優先測試哪些組合
-- 可以延後測試的組合
-
-**階段式測試**：
-- 第一階段：測試哪些變數
-- 第二階段：基於結果再測試
-- 如何累積學習
-
-**快速迭代**：
-- 如何在資源有限下快速測試
-- 使用漸進式推出（Gradual Rollout）
-- 何時該停止測試並決策
-
-### 5. ⚠️ 風險與注意事項
-
-**統計陷阱**：
-- 多重比較問題（Bonferroni 校正）
-- 假陽性率控制
-- 樣本不足的風險
-
-**實務挑戰**：
-- 測試時間過長導致市場變化
-- 流量不足無法達到顯著性
-- 如何平衡速度與準確性
-
-### 6. 📋 執行檢查清單
-
-**測試前**：
-- [ ] 確認測試目標明確
-- [ ] 計算所需樣本數
-- [ ] 設定追蹤機制
-- [ ] 預估測試時長
-- [ ] 團隊溝通測試計畫
-
-**測試中**：
-- [ ] 監控各變體表現
-- [ ] 檢查流量分配正確性
-- [ ] 記錄異常事件
-- [ ] 評估是否提前停止
-
-**測試後**：
-- [ ] 主效應分析
-- [ ] 交互效應分析
-- [ ] 找出最佳組合
-- [ ] 撰寫測試報告
-- [ ] 決策並推出勝出組合
-
-### 7. 🚀 最佳組合預測
-
-基於變數特性，預測可能的高效組合（Top 3）：
-- **組合 1**：[具體組合] - 預期效果 + 理由
-- **組合 2**：[具體組合] - 預期效果 + 理由
-- **組合 3**：[具體組合] - 預期效果 + 理由
-
-請用繁體中文回答，語氣專業但易懂，提供可執行的具體建議，使用 Markdown 格式。
-"""
-
-    return llm_service.generate_insights(
-        prompt=prompt,
-        model="gpt-4o-mini",
-        max_tokens=3000,
-        temperature=0.7
-    )
-
 def simulate_mvt_results(combinations_df, baseline_rate=0.02):
     """模擬 MVT 結果（示範用）"""
     np.random.seed(42)
@@ -219,6 +85,60 @@ def simulate_mvt_results(combinations_df, baseline_rate=0.02):
     )
 
     return combinations_df
+
+@st.cache_resource
+def get_mvt_design_agent() -> MVTDesignAgent | None:
+    """建立並快取 MVTDesignAgent。"""
+    try:
+        return MVTDesignAgent()
+    except Exception as exc:  # pragma: no cover - Streamlit 介面顯示
+        st.error(f"❌ 無法初始化 MVTDesignAgent：{exc}")
+        return None
+
+
+def render_mvt_design_result(result: MVTDesignResult) -> None:
+    """呈現 MVTDesignAgent 的輸出。"""
+    plan = result.plan
+
+    st.subheader("🧭 MVT 測試計畫")
+    st.markdown(f"**核心假設**：{plan.hypothesis}")
+
+    col1, col2 = st.columns(2)
+    col1.metric("主要衡量指標", plan.primary_metric)
+    col2.metric("總組合數", str(plan.required_runs))
+
+    st.markdown("### 🔬 測試因子與層級")
+    for idx, factor in enumerate(plan.factors, start=1):
+        header = f"{idx}. {factor.factor}"
+        with st.expander(header, expanded=(idx == 1)):
+            st.markdown(f"**選擇理由**：{factor.rationale}")
+            st.markdown("**測試層級**：")
+            for level in factor.levels:
+                st.markdown(f"- {level}")
+
+    if plan.interaction_focus:
+        st.markdown("### 🔁 交互作用關注")
+        for item in plan.interaction_focus:
+            st.markdown(f"- {item}")
+
+    if plan.phased_rollout:
+        st.markdown("### 🚀 分階段上線策略")
+        for phase in plan.phased_rollout:
+            st.markdown(f"- {phase}")
+
+    _render_bullet_section("📡 資料蒐集計畫", result.data_collection_plan)
+    _render_bullet_section("🧮 分析框架", result.analysis_framework)
+    _render_bullet_section("🛡️ 風險控管", result.risk_controls)
+    _render_bullet_section("👥 利害關係人", result.stakeholders)
+
+
+def _render_bullet_section(title: str, items: list[str]) -> None:
+    if not items:
+        return
+    st.markdown(f"### {title}")
+    for item in items:
+        st.markdown(f"- {item}")
+
 
 def main():
     st.title("🧬 多變量測試（MVT）優化")
@@ -437,6 +357,10 @@ def main():
                 elif test_days > 14:
                     st.warning(f"⚠️ 測試時間較長（{test_days} 天），需注意市場變化")
 
+            st.session_state['mvt_baseline_rate'] = baseline_rate
+            st.session_state['mvt_mde'] = mde
+            st.session_state['mvt_daily_traffic'] = daily_traffic
+
             # 儲存組合
             st.session_state['mvt_combinations_df'] = combinations_df
             st.session_state['mvt_test_days'] = test_days
@@ -449,50 +373,79 @@ def main():
         else:
             variables = st.session_state['mvt_variables']
             num_combinations = st.session_state['mvt_combinations']
+            baseline_rate = st.session_state.get('mvt_baseline_rate', 0.02)
+            mde = st.session_state.get('mvt_mde', 0.2)
+            stored_daily_traffic = st.session_state.get('mvt_daily_traffic', 5000)
 
             st.info(f"✅ 測試設定完成：{len(variables)} 個變數，{num_combinations} 個組合")
 
-            # 估算流量
-            daily_traffic = st.number_input(
-                "預期每日訪客數（用於 AI 分析）",
+            col1, col2, col3 = st.columns(3)
+            col1.metric('組合數', num_combinations)
+            col2.metric('基準轉換率', f"{baseline_rate * 100:.2f}%")
+            col3.metric('MDE', f"{mde * 100:.1f}%")
+
+            ai_daily_traffic = st.number_input(
+                '預期每日訪客數（用於 AI 計畫）',
                 min_value=100,
                 max_value=100000,
-                value=5000,
+                value=int(stored_daily_traffic),
                 step=500,
-                key="ai_traffic"
+                key='mvt_ai_daily_traffic'
             )
 
-            # AI 分析按鈕
-            if st.button("🚀 開始 AI MVT 分析", type="primary"):
-                with st.spinner("AI 正在分析 MVT 設計並提供優化建議..."):
-                    analysis = analyze_mvt_with_ai(
-                        test_objective,
-                        variables,
-                        num_combinations,
-                        daily_traffic
-                    )
+            launch_calendar_input = st.text_area(
+                '關鍵檔期 / Launch 限制（每行一項，可留空）',
+                placeholder='例如：3/15 春季檔期起跑\n3/28 電商大促前必須凍結變更',
+            )
+            launch_calendar = [line.strip() for line in launch_calendar_input.splitlines() if line.strip()]
 
-                    if analysis and not analysis.startswith("❌"):
-                        st.markdown("---")
-                        st.markdown("### 🎯 AI 分析結果")
-                        st.markdown(analysis)
+            default_template = {
+                'best_practices': [
+                    '每個因子維持 2-3 個層級以控制組合數',
+                    '先採均等流量，依中期結果再調整分配',
+                    '設定護欄指標，例如 CPA 與 CTR 低於歷史分位須暫停'
+                ],
+                'analysis_methods': [
+                    '使用 ANOVA 檢驗主效應與交互效應',
+                    '採用 Bonferroni 校正控制多重比較風險',
+                    'MVT 結束後以增量提升量化投資報酬'
+                ]
+            }
 
-                        # 儲存分析結果
-                        st.session_state['mvt_analysis'] = analysis
-                        st.session_state['mvt_analysis_time'] = pd.Timestamp.now()
-                    else:
-                        st.error(analysis if analysis else "AI 分析失敗")
+            if st.button('🚀 啟動 MVTDesignAgent', type='primary'):
+                agent = get_mvt_design_agent()
+                if agent is None:
+                    st.stop()
 
-            # 顯示歷史分析
-            if 'mvt_analysis' in st.session_state:
-                st.markdown("---")
-                st.markdown("### 📚 最近的分析結果")
+                with st.spinner('AI 正在設計 MVT 測試計畫...'):
+                    try:
+                        result = agent.design_sync(
+                            df=df,
+                            variables=variables,
+                            test_objective=test_objective,
+                            baseline_rate=baseline_rate,
+                            minimum_detectable_effect=mde,
+                            expected_daily_traffic=ai_daily_traffic,
+                            design_template=default_template,
+                            launch_calendar=launch_calendar or None,
+                        )
+                        st.session_state['mvt_design_result'] = result
+                        st.session_state['mvt_design_generated_at'] = pd.Timestamp.now()
+                        st.success('✅ 已生成完整的 MVT 測試計畫')
+                    except Exception as exc:
+                        st.error(f'❌ 生成失敗：{exc}')
+                        import traceback
+                        with st.expander('🔍 錯誤詳情'):
+                            st.code(traceback.format_exc())
 
-                if 'mvt_analysis_time' in st.session_state:
-                    st.caption(f"生成時間：{st.session_state['mvt_analysis_time'].strftime('%Y-%m-%d %H:%M:%S')}")
-
-                with st.expander("查看完整分析", expanded=False):
-                    st.markdown(st.session_state['mvt_analysis'])
+            design_result: MVTDesignResult | None = st.session_state.get('mvt_design_result')
+            if design_result:
+                generated_at = st.session_state.get('mvt_design_generated_at')
+                if generated_at:
+                    st.caption(f"最後更新時間：{generated_at.strftime('%Y-%m-%d %H:%M:%S')}")
+                render_mvt_design_result(design_result)
+            else:
+                st.info('設定完成後點擊按鈕，即可獲得完整的 MVT 設計計畫。')
 
     with tab4:
         st.markdown("## 📈 MVT 結果分析")

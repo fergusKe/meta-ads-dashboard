@@ -1,15 +1,27 @@
+import os
+
 import streamlit as st
 import pandas as pd
 import numpy as np
 import plotly.express as px
 import plotly.graph_objects as go
-from plotly.subplots import make_subplots
-from datetime import datetime, timedelta
-import openai
-import os
-from utils.data_loader import load_meta_ads_data, calculate_summary_metrics
+from datetime import datetime
+
+from utils.data_loader import load_meta_ads_data
+from utils.rag_service import RAGService
+from utils.agents import CreativeOptimizationAgent, CreativeOptimizationResult
 
 st.set_page_config(page_title="智能素材優化", page_icon="🧠", layout="wide")
+
+
+@st.cache_resource
+def get_creative_agent() -> CreativeOptimizationAgent | None:
+    """Provide a cached CreativeOptimizationAgent instance for the page."""
+    try:
+        return CreativeOptimizationAgent()
+    except Exception as exc:
+        st.error(f"❌ CreativeOptimizationAgent 初始化失敗：{exc}")
+        return None
 
 def analyze_creative_performance(df):
     """分析素材表現"""
@@ -115,54 +127,6 @@ def identify_optimization_opportunities(df):
                 })
 
     return opportunities
-
-def generate_ai_recommendations(performance_data, opportunities):
-    """使用 AI 生成智能建議"""
-    try:
-        openai.api_key = os.getenv('OPENAI_API_KEY')
-        if not openai.api_key:
-            return "無法連接 AI 服務，請檢查 API 設定"
-
-        # 準備數據摘要
-        data_summary = f"""
-總活動數: {len(performance_data) if performance_data else 0}
-優化機會數: {len(opportunities)}
-主要問題: {', '.join([opp['type'] for opp in opportunities[:3]])}
-"""
-
-        prompt = f"""
-作為廣告優化專家，請基於以下耘初茶食的 Meta 廣告數據分析，提供具體的素材優化建議：
-
-數據摘要：
-{data_summary}
-
-主要優化機會：
-{opportunities[:5]}
-
-請提供：
-1. 素材設計優化建議
-2. 文案改進方向
-3. 受眾定位調整
-4. 預算分配建議
-5. A/B測試策略
-
-要求簡潔實用，每個建議不超過50字。
-"""
-
-        response = openai.ChatCompletion.create(
-            model="gpt-3.5-turbo",
-            messages=[
-                {"role": "system", "content": "你是專業的數位廣告優化顧問，專精於Meta廣告優化。"},
-                {"role": "user", "content": prompt}
-            ],
-            max_tokens=800,
-            temperature=0.7
-        )
-
-        return response.choices[0].message.content
-
-    except Exception as e:
-        return f"AI 建議生成失敗：{str(e)}"
 
 def create_performance_radar_chart(campaign_data):
     """創建表現雷達圖"""
@@ -286,6 +250,68 @@ def create_budget_reallocation_chart(df):
     )
 
     return fig
+
+
+def render_creative_agent_result(result: CreativeOptimizationResult) -> None:
+    """Render structured output from CreativeOptimizationAgent."""
+    st.subheader("🤖 Pydantic AI 優化結果")
+
+    for idx, optimization in enumerate(result.optimizations, start=1):
+        priority = optimization.priority or "🟡 中"
+        icon = priority.strip()[0] if priority and not priority.strip()[0].isalnum() else "🟡"
+        title = f"{icon} {optimization.element_type}"
+
+        with st.expander(title, expanded=idx == 1):
+            st.markdown(f"**優先級**：{priority}")
+            st.markdown(f"**當前表現**：{optimization.current_performance}")
+            st.markdown(f"**建議動作**：{optimization.optimization_action}")
+            st.markdown(f"**預期改善**：{optimization.expected_improvement}")
+            if optimization.execution_steps:
+                st.markdown("**執行步驟**：")
+                for step in optimization.execution_steps:
+                    st.markdown(f"- {step}")
+
+    if result.quick_wins:
+        st.subheader("⚡ 快速見效改進")
+        for idx, item in enumerate(result.quick_wins, start=1):
+            st.markdown(f"{idx}. {item}")
+
+    st.subheader("🧭 長期素材策略")
+    st.info(result.long_term_strategy)
+
+    if result.ab_test_plan:
+        st.subheader("🧪 A/B 測試計畫")
+        for idx, variant in enumerate(result.ab_test_plan, start=1):
+            with st.expander(f"測試 {idx}：{variant.variant_name}", expanded=idx == 1):
+                st.markdown(f"**測試假設**：{variant.hypothesis}")
+                if variant.changes:
+                    st.markdown("**變更內容**：")
+                    for change in variant.changes:
+                        st.markdown(f"- {change}")
+                st.markdown(f"**預期指標影響**：{variant.expected_metric_impact}")
+
+    if result.performance_prediction:
+        st.subheader("📈 表現預測")
+        for metric, commentary in result.performance_prediction.items():
+            st.markdown(f"- **{metric}**：{commentary}")
+
+    col1, col2 = st.columns(2)
+
+    with col1:
+        st.markdown("**🛠️ 資源需求**")
+        if result.resource_requirements:
+            for resource, detail in result.resource_requirements.items():
+                st.markdown(f"- **{resource}**：{detail}")
+        else:
+            st.write("無額外資源需求")
+
+    with col2:
+        st.markdown("**⚠️ 風險評估**")
+        if result.risk_assessment:
+            for risk, mitigation in result.risk_assessment.items():
+                st.markdown(f"- **{risk}**：{mitigation}")
+        else:
+            st.write("未識別風險")
 
 def main():
     st.title("🧠 智能素材優化")
@@ -411,30 +437,140 @@ def main():
                     st.plotly_chart(fig, use_container_width=True)
 
     with tab3:
-        st.subheader("💡 AI 智能建議")
+        st.subheader("💡 AI 智能建議（Pydantic Agent）")
 
-        with st.spinner("AI 正在分析您的廣告數據..."):
-            ai_recommendations = generate_ai_recommendations(
-                creative_analysis.get('campaign_performance'),
-                opportunities
+        creative_agent = get_creative_agent()
+        result_key = "creative_optimization_result"
+        timestamp_key = "creative_optimization_timestamp"
+
+        if creative_agent is None:
+            st.warning("CreativeOptimizationAgent 尚未就緒，請檢查 API 設定後重新整理頁面。")
+        else:
+            col1, col2 = st.columns([2, 1])
+
+            with col1:
+                target_roas = st.slider(
+                    "設定目標 ROAS",
+                    min_value=1.0,
+                    max_value=6.0,
+                    value=3.0,
+                    step=0.1,
+                    help="設定希望達到的 ROAS 目標，Agent 會以此為優化參考。"
+                )
+
+                focus_options = [
+                    "提升圖片吸引力",
+                    "優化文案訊息",
+                    "強化轉換漏斗",
+                    "重新分配預算",
+                    "策略整體調整",
+                    "自定義"
+                ]
+                focus_choice = st.selectbox("優化重點", focus_options)
+
+                if focus_choice == "自定義":
+                    focus_area_input = st.text_input(
+                        "請描述自定義優化重點",
+                        placeholder="例如：強化新品上市活動的視覺與文案"
+                    )
+                    focus_area = focus_area_input.strip() or None
+                else:
+                    focus_area = focus_choice
+
+            with col2:
+                st.metric("目前平均 ROAS", f"{avg_roas:.2f}")
+                st.metric("優化機會", len(opportunities))
+                use_rag = st.checkbox(
+                    "📚 參考歷史案例（RAG）",
+                    value=True,
+                    help="啟用後會載入高效廣告知識庫，提供更貼近品牌的優化建議。"
+                )
+
+            run_agent = st.button(
+                "🚀 啟動 CreativeOptimizationAgent",
+                type="primary",
+                use_container_width=True
             )
 
-        st.markdown("### 🤖 AI 專家建議")
-        st.markdown(ai_recommendations)
+            if run_agent:
+                log_container = st.container()
 
-        # 行動計劃
-        st.markdown("### 📋 建議行動計劃")
+                with log_container:
+                    st.markdown("### 🤖 Agent 執行流程")
 
-        action_plan = [
-            "🎯 **立即行動**：處理高優先級優化機會",
-            "📊 **數據監控**：設定關鍵指標警報",
-            "🧪 **A/B測試**：測試新的素材變化",
-            "💰 **預算調整**：根據 ROAS 重新分配預算",
-            "📈 **效果追蹤**：每周檢視優化效果"
-        ]
+                    with st.status("📋 Step 1: 初始化 CreativeOptimizationAgent", expanded=True) as status:
+                        model_name = os.getenv("OPENAI_MODEL", "gpt-5-nano")
+                        st.write("✓ Agent 類型：**CreativeOptimizationAgent**")
+                        st.write(f"✓ 模型：**{model_name}**（從 .env 讀取）")
+                        st.write("✓ 輸出類型：**CreativeOptimizationResult**")
+                        status.update(label="✅ Step 1: 初始化完成", state="complete")
 
-        for action in action_plan:
-            st.markdown(f"- {action}")
+                    rag_service = None
+                    if use_rag:
+                        with st.status("📚 Step 2: 載入 RAG 知識庫", expanded=True) as status:
+                            try:
+                                rag_service = RAGService()
+                                if rag_service.load_knowledge_base("ad_creatives"):
+                                    st.write("✓ 知識庫：**ad_creatives**")
+                                    st.write("✓ 來源：歷史高 ROAS 廣告案例")
+                                    st.write("✓ 檢索模式：語義搜尋 (Top 5)")
+                                    status.update(label="✅ Step 2: 知識庫載入成功", state="complete")
+                                else:
+                                    st.write("⚠️ 知識庫載入失敗，改用一般模式")
+                                    rag_service = None
+                                    status.update(label="⚠️ Step 2: RAG 不可用", state="error")
+                            except Exception as exc:
+                                st.write(f"⚠️ 載入失敗：{exc}")
+                                rag_service = None
+                                status.update(label="⚠️ Step 2: RAG 不可用", state="error")
+                    else:
+                        st.info("📚 Step 2: 已跳過 RAG 知識庫（未啟用）")
+
+                    with st.status("🔧 Step 3: 準備數據分析工具", expanded=True) as status:
+                        st.write("**CreativeOptimizationAgent 將調用以下工具：**")
+                        st.write("1. `analyze_creative_performance()` - 評估素材表現")
+                        st.write("2. `get_successful_creative_patterns()` - 找出成功模式")
+                        st.write("3. `identify_underperforming_elements()` - 識別低效元素")
+                        st.write("4. `get_optimization_examples()` - 檢索優化案例/RAG")
+                        st.write("5. `calculate_optimization_potential()` - 預估優化潛力")
+                        status.update(label="✅ Step 3: 工具準備完成", state="complete")
+
+                    with st.status("🧠 Step 4: 生成優化計畫", expanded=True) as status:
+                        st.write(f"🤖 正在呼叫 **{model_name}** 模型進行策略推理...")
+                        st.write("📊 整合歷史數據與品牌上下文...")
+                        st.write("📝 準備產出結構化的 CreativeOptimizationResult")
+
+                        try:
+                            result: CreativeOptimizationResult = creative_agent.optimize_creative_sync(
+                                df=df,
+                                target_roas=target_roas,
+                                focus_area=focus_area,
+                                rag_service=rag_service
+                            )
+
+                            st.write(f"✓ 生成 {len(result.optimizations)} 項優化建議")
+                            st.write(f"✓ 包含 {len(result.ab_test_plan)} 個 A/B 測試方案")
+                            st.write("✓ 型別驗證通過（Pydantic）")
+                            status.update(label="✅ Step 4: 優化計畫生成完成", state="complete")
+
+                            st.session_state[result_key] = result
+                            st.session_state[timestamp_key] = datetime.now()
+
+                        except Exception as exc:
+                            st.error(f"❌ 優化計畫生成失敗：{exc}")
+                            status.update(label="❌ Step 4: 生成失敗", state="error")
+                            import traceback
+                            with st.expander("🔍 錯誤詳情"):
+                                st.code(traceback.format_exc())
+
+            if st.session_state.get(result_key):
+                st.divider()
+                last_run = st.session_state.get(timestamp_key)
+                if last_run:
+                    st.caption(f"上次生成時間：{last_run.strftime('%Y-%m-%d %H:%M:%S')}")
+                render_creative_agent_result(st.session_state[result_key])
+            else:
+                st.info("點擊上方按鈕即可生成專屬的素材優化計畫。")
 
     with tab4:
         st.subheader("🔧 優化工具箱")
@@ -485,7 +621,7 @@ def main():
         ]
 
         for item in checklist_items:
-            checked = st.checkbox(item, key=f"checklist_{item}")
+            _ = st.checkbox(item, key=f"checklist_{item}")
 
         # 優化模板下載
         st.markdown("### 📄 優化模板")
