@@ -1,8 +1,8 @@
 """
-圖片分析 Agent (Pydantic AI + GPT-4o Vision)
+圖片分析 Agent (Pydantic AI + Gemini 2.5 Flash Image)
 
 功能：
-- 使用 GPT-4o Vision 分析廣告圖片
+- 使用 Gemini 2.5 Flash Image 分析廣告圖片
 - 6 大維度專業評分
 - 詳細優缺點分析
 - 生成優化建議
@@ -10,9 +10,10 @@
 
 特色：
 - 完全型別安全
-- 整合 Vision API
+- 整合 Gemini Vision API
 - 自動生成優化提示詞
 - 品牌一致性檢查
+- 統一使用 Gemini（分析+生成）
 """
 
 import os
@@ -96,7 +97,7 @@ class ImageAnalysisDeps:
 # ============================================
 
 class ImageAnalysisAgent:
-    """圖片分析 Agent（Pydantic AI + GPT-4o Vision）"""
+    """圖片分析 Agent（Pydantic AI + Gemini 2.5 Flash Image）"""
 
     def __init__(self):
         """初始化 Agent"""
@@ -185,21 +186,29 @@ class ImageAnalysisAgent:
 
         @self.agent.tool
         def analyze_with_vision(ctx: RunContext[ImageAnalysisDeps]) -> dict:
-            """使用 GPT-4o Vision API 分析圖片"""
+            """使用 Gemini 2.5 Flash Image 分析圖片"""
             image = ctx.deps.image
             brand_context = ctx.deps.brand_context
-            client = ctx.deps.openai_client
-
-            if not client:
-                return {'error': 'OpenAI 客戶端未提供'}
 
             try:
-                # 將圖片轉為 base64
+                from google import genai
+                import os
+
+                # 取得 Gemini API Key
+                api_key = os.getenv('GEMINI_API_KEY')
+                if not api_key:
+                    return {'error': 'GEMINI_API_KEY 未設定', 'success': False}
+
+                # 初始化 Gemini 客戶端
+                client = genai.Client(api_key=api_key)
+                model_name = os.getenv('GEMINI_IMAGE_MODEL', 'gemini-2.5-flash-image')
+
+                # 將圖片轉為 bytes
                 buffered = BytesIO()
                 image.save(buffered, format="PNG")
-                base64_image = base64.b64encode(buffered.getvalue()).decode('utf-8')
+                image_bytes = buffered.getvalue()
 
-                # 構建 Vision 分析提示
+                # 構建分析提示
                 vision_prompt = f"""
 請以專業廣告分析師的角度，詳細分析這張廣告圖片。
 
@@ -216,38 +225,40 @@ class ImageAnalysisAgent:
 請提供客觀且詳細的描述，作為後續評分的依據。
 """
 
-                # 呼叫 GPT-4o Vision API
-                response = client.chat.completions.create(
-                    model="gpt-4o",
-                    messages=[
+                # 呼叫 Gemini Vision API
+                response = client.models.generate_content(
+                    model=model_name,
+                    contents=[
+                        vision_prompt,
                         {
-                            "role": "user",
-                            "content": [
-                                {
-                                    "type": "text",
-                                    "text": vision_prompt
-                                },
-                                {
-                                    "type": "image_url",
-                                    "image_url": {
-                                        "url": f"data:image/png;base64,{base64_image}"
-                                    }
-                                }
-                            ]
+                            "inline_data": {
+                                "mime_type": "image/png",
+                                "data": base64.b64encode(image_bytes).decode('utf-8')
+                            }
                         }
-                    ],
-                    max_tokens=1000,
-                    temperature=0.3
+                    ]
                 )
 
+                # 解析回應
+                if hasattr(response, 'candidates') and response.candidates:
+                    for candidate in response.candidates:
+                        if hasattr(candidate, 'content') and candidate.content:
+                            if hasattr(candidate.content, 'parts') and candidate.content.parts:
+                                for part in candidate.content.parts:
+                                    if hasattr(part, 'text') and part.text:
+                                        return {
+                                            'vision_analysis': part.text,
+                                            'success': True
+                                        }
+
                 return {
-                    'vision_analysis': response.choices[0].message.content,
-                    'success': True
+                    'error': 'Gemini 未返回文字分析',
+                    'success': False
                 }
 
             except Exception as e:
                 return {
-                    'error': str(e),
+                    'error': f'Gemini 分析失敗：{str(e)}',
                     'success': False
                 }
 
