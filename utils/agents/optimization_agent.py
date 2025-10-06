@@ -21,9 +21,17 @@ from dataclasses import dataclass
 from typing import Optional
 
 import pandas as pd
+import streamlit as st
 from pydantic import BaseModel, Field
 from pydantic_ai import Agent, RunContext
 
+from utils.cache_manager import cache_agent_result
+from utils.error_handler import handle_agent_errors
+from utils.model_selector import ModelSelector
+from utils.history_manager import record_history
+from utils.validators import validate_inputs
+from utils.security import sanitize_payload
+from utils.progress import progress_tracker, update_progress, register_cancel_button, reset_cancel_flag
 
 # ============================================
 # 結構化輸出定義（完全型別安全）
@@ -110,7 +118,8 @@ class OptimizationAgent:
     """即時優化建議 Agent（Pydantic AI）"""
 
     def __init__(self) -> None:
-        model_name = os.getenv("OPENAI_MODEL", "gpt-5-nano")
+        selector = ModelSelector()
+        model_name = selector.choose(complexity=os.getenv('OPTIMIZATION_COMPLEXITY', 'balanced'))
         self.agent = Agent(
             f"openai:{model_name}",
             output_type=OptimizationResult,
@@ -295,6 +304,8 @@ class OptimizationAgent:
 
     # ---------------------- 對外方法 ----------------------
 
+    @cache_agent_result()
+    @handle_agent_errors(context='即時優化分析')
     async def optimize(
         self,
         df: pd.DataFrame,
@@ -305,15 +316,28 @@ class OptimizationAgent:
     ) -> OptimizationResult:
         """執行即時優化分析 (async)"""
 
-        deps = OptimizationDeps(
-            df=df,
-            target_roas=target_roas,
-            max_cpa=max_cpa,
-            min_daily_budget=min_daily_budget,
-            rag_service=rag_service,
-        )
+        reset_cancel_flag()
+        register_cancel_button(label='停止優化分析')
 
-        user_prompt = f"""
+        warnings = validate_inputs({'target_audience': None, 'objective': None})
+        if warnings:
+            for message in warnings:
+                st.warning(f'輸入提醒: {message}')
+
+        with progress_tracker(3, label='分析中...'):
+            update_progress(text='準備資料...')
+            deps = OptimizationDeps(
+                df=df,
+                target_roas=target_roas,
+                max_cpa=max_cpa,
+                min_daily_budget=min_daily_budget,
+                rag_service=rag_service,
+            )
+            if st.session_state.get('_agent_cancelled'):
+                raise RuntimeError('使用者已取消分析')
+
+            update_progress(text='彙整提示詞...')
+            user_prompt = f"""
 請根據提供的廣告數據與分析工具輸出即時優化建議。
 
 設定參數：
@@ -331,8 +355,23 @@ class OptimizationAgent:
 輸出時務必填滿 `OptimizationResult` 所有欄位，並依據優先級與影響條理化。
 """
 
+            update_progress(text='呼叫 AI...')
+            if st.session_state.get('_agent_cancelled'):
+                raise RuntimeError('使用者已取消分析')
+
         result = await self.agent.run(user_prompt, deps=deps)
-        return result.output
+        output = result.output
+        record_history(
+            'OptimizationAgent',
+            inputs=sanitize_payload({
+                'target_roas': f'{target_roas:.2f}',
+                'max_cpa': f'{max_cpa:.2f}',
+                'min_daily_budget': f'{min_daily_budget:.2f}',
+            }),
+            output=output.model_dump() if hasattr(output, 'model_dump') else str(output),
+            metadata={'warnings': warnings},
+        )
+        return output
 
     def optimize_sync(
         self,

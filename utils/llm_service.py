@@ -1,16 +1,24 @@
 """
 LLM 服務層
-提供統一的 LLM 調用接口，支援快取、錯誤處理和成本控制
+提供統一的 LLM 調用接口，支援快取、錯誤處理、成本監控與 API Key 輪替。
 """
 
-import os
+from __future__ import annotations
+
+import csv
 import json
 import hashlib
+import os
 from datetime import datetime, timedelta
+from pathlib import Path
 from typing import Optional, Dict, Any
 
 import streamlit as st
 from dotenv import load_dotenv
+
+from utils.api_keys import get_api_key_manager
+from utils.logging_manager import log_event, log_exception, log_metric
+from utils.security import sanitize_payload
 
 # 嘗試導入 OpenAI
 try:
@@ -20,78 +28,134 @@ except ImportError:
     OPENAI_AVAILABLE = False
     st.warning("⚠️ OpenAI 套件未安裝，AI 功能將無法使用。請執行：pip install openai")
 
-
 # 載入環境變數，確保 CLI 與 Streamlit 共用設定
 load_dotenv()
+
+LLM_USAGE_FILE = Path(os.getenv("LLM_USAGE_FILE", "data/history/llm_usage.csv"))
+LLM_USAGE_FILE.parent.mkdir(parents=True, exist_ok=True)
+
+
+def _append_usage_log(payload: Dict[str, Any]) -> None:
+    is_new = not LLM_USAGE_FILE.exists()
+    with LLM_USAGE_FILE.open("a", encoding="utf-8", newline="") as f:
+        writer = csv.DictWriter(f, fieldnames=payload.keys())
+        if is_new:
+            writer.writeheader()
+        writer.writerow(payload)
 
 
 class LLMService:
     """LLM 服務類別"""
 
-    def __init__(self):
-        """初始化 LLM 服務"""
-        self.client = None
-        self.cache = {}
+    def __init__(self) -> None:
+        self.cache: Dict[str, Dict[str, Any]] = {}
         self.model_name = os.getenv("OPENAI_MODEL", "gpt-5-nano")
         try:
             self.cache_ttl = int(os.getenv("CACHE_TTL", "3600"))
         except ValueError:
             self.cache_ttl = 3600
 
-        # 成本監控
         self.usage_stats = {
             'total_calls': 0,
             'cache_hits': 0,
             'total_tokens': 0,
-            'estimated_cost': 0.0
+            'estimated_cost': 0.0,
         }
 
+        self.api_key_manager = get_api_key_manager()
+        self.client: Optional[OpenAI] = None
+        self.current_key: Optional[str] = None
         if OPENAI_AVAILABLE:
             self._initialize_client()
 
-    def _initialize_client(self):
-        """初始化 OpenAI 客戶端"""
-        api_key = os.getenv("OPENAI_API_KEY")
-        if not api_key and hasattr(st, "secrets"):
-            api_key = st.secrets.get("OPENAI_API_KEY")
+    # ------------------------------------------------------------------
+    # 客戶端與 API Key
+    # ------------------------------------------------------------------
+    def _initialize_client(self) -> None:
+        key = None
+        if self.api_key_manager.has_keys():
+            key = self.api_key_manager.acquire()
+        else:
+            single_key = os.getenv("OPENAI_API_KEY")
+            if single_key:
+                key = single_key
 
-        if not api_key:
+        if not key:
             st.warning("⚠️ 尚未設定 OPENAI_API_KEY，AI 功能將停用。")
             return
 
         try:
-            self.client = OpenAI(api_key=api_key)
+            self.client = OpenAI(api_key=key)
+            self.current_key = key
+            log_event("llm_client_initialized", {"key_suffix": key[-4:]})
         except Exception as exc:
-            st.error(f"❌ OpenAI 客戶端初始化失敗：{exc}")
+            log_exception(exc, "initialize_openai_client")
             self.client = None
 
-    def is_available(self) -> bool:
-        """檢查 LLM 服務是否可用"""
-        return OPENAI_AVAILABLE and self.client is not None
+    def _rotate_key(self) -> None:
+        if not self.api_key_manager.has_keys():
+            return
+        self._initialize_client()
 
-    def _get_cache_key(self, prompt: str) -> str:
-        """生成快取鍵值"""
-        return hashlib.md5(prompt.encode()).hexdigest()
+    # ------------------------------------------------------------------
+    # 快取
+    # ------------------------------------------------------------------
+    def _get_cache_key(self, prompt: str, model: str) -> str:
+        return hashlib.md5(f"{model}:{prompt}".encode("utf-8")).hexdigest()
 
     def _get_cached_response(self, cache_key: str) -> Optional[str]:
-        """取得快取回應"""
-        if cache_key in self.cache:
-            cached_data = self.cache[cache_key]
-            # 檢查是否過期
-            if datetime.now() - cached_data['timestamp'] < timedelta(seconds=self.cache_ttl):
-                self.usage_stats['cache_hits'] += 1
-                return cached_data['response']
-            else:
-                # 移除過期快取
-                del self.cache[cache_key]
-        return None
+        entry = self.cache.get(cache_key)
+        if not entry:
+            return None
+        if datetime.now() - entry['timestamp'] > timedelta(seconds=self.cache_ttl):
+            del self.cache[cache_key]
+            return None
+        self.usage_stats['cache_hits'] += 1
+        return entry['response']
 
-    def _set_cache(self, cache_key: str, response: str):
-        """設定快取"""
+    def _set_cache(self, cache_key: str, response: str) -> None:
         self.cache[cache_key] = {
             'response': response,
-            'timestamp': datetime.now()
+            'timestamp': datetime.now(),
         }
+
+    # ------------------------------------------------------------------
+    # 核心呼叫
+    # ------------------------------------------------------------------
+    def is_available(self) -> bool:
+        return OPENAI_AVAILABLE and self.client is not None
+
+    def _log_usage(self, model: str, tokens: int, cost: float, source: str) -> None:
+        payload = {
+            'timestamp': datetime.utcnow().isoformat(),
+            'model': model,
+            'tokens': tokens,
+            'cost': cost,
+            'source': source,
+        }
+        _append_usage_log(payload)
+        log_metric("llm_cost", cost, namespace="llm")
+
+    def _estimate_cost(self, tokens: int, model_name: str) -> float:
+        if 'gpt-4' in model_name:
+            rate = 0.015
+        elif 'gpt-5' in model_name:
+            rate = 0.0004
+        else:
+            rate = 0.0005
+        return tokens * rate / 1000
+
+    def _handle_failure(self, error: Exception) -> str:
+        lowered = str(error).lower()
+        if "rate limit" in lowered:
+            return "⚠️ API 調用次數已達上限，請稍後再試。"
+        if "api key" in lowered or "authentication" in lowered:
+            return "❌ API 金鑰無效或已過期，請檢查設定。"
+        if "insufficient_quota" in lowered:
+            return "⚠️ API 配額不足，請檢查 OpenAI 帳戶。"
+        if "timeout" in lowered:
+            return "⚠️ 請求逾時，請稍後再試。"
+        return f"❌ AI 分析失敗：{error}"
 
     def generate_insights(
         self,
@@ -99,189 +163,80 @@ class LLMService:
         model: Optional[str] = None,
         max_tokens: int = 1000,
         temperature: float = 0.7,
-        use_cache: bool = True
+        use_cache: bool = True,
+        source: str = "insights"
     ) -> str:
-        """
-        生成 AI 洞察
-
-        Args:
-            prompt: 提示詞
-            model: 模型名稱 (gpt-3.5-turbo 或 gpt-4)
-            max_tokens: 最大 token 數
-            temperature: 溫度參數 (0-1，越高越隨機)
-            use_cache: 是否使用快取
-
-        Returns:
-            AI 生成的回應文字
-        """
         if not self.is_available():
             return "❌ AI 功能目前無法使用，請設定 OPENAI_API_KEY"
 
-        # 檢查快取
         model_name = model or self.model_name
-
+        cache_key = self._get_cache_key(prompt, model_name)
         if use_cache:
-            cache_key = self._get_cache_key(f"{model_name}:{prompt}")
-            cached_response = self._get_cached_response(cache_key)
-            if cached_response:
-                return cached_response
+            cached = self._get_cached_response(cache_key)
+            if cached:
+                log_event("llm_cache_hit", {"model": model_name})
+                return cached
 
         try:
-            # 調用 OpenAI API
             response = self.client.chat.completions.create(
                 model=model_name,
                 messages=[
                     {
                         "role": "system",
-                        "content": "你是一位專業的 Meta 廣告投放顧問，擅長分析廣告數據並提供可執行的優化建議。"
+                        "content": "你是一位專業的 Meta 廣告投放顧問，擅長分析廣告數據並提供可執行的優化建議。",
                     },
-                    {
-                        "role": "user",
-                        "content": prompt
-                    }
+                    {"role": "user", "content": prompt},
                 ],
                 max_tokens=max_tokens,
-                temperature=temperature
+                temperature=temperature,
             )
-
             result = response.choices[0].message.content
-
-            # 更新使用統計
             self.usage_stats['total_calls'] += 1
-            if hasattr(response, 'usage'):
-                tokens = response.usage.total_tokens
-                self.usage_stats['total_tokens'] += tokens
-                # 估算成本 (gpt-5-nano: $0.15/1M input tokens, $0.60/1M output tokens)
-                # 簡化計算：假設 input/output 各佔一半
-                if 'gpt-5-nano' in model_name or 'gpt-3.5' in model_name:
-                    cost = (tokens / 1000000) * 0.375  # 平均成本
-                elif 'gpt-4' in model_name:
-                    cost = (tokens / 1000000) * 15  # GPT-4 平均成本
-                else:
-                    cost = (tokens / 1000000) * 0.375
-                self.usage_stats['estimated_cost'] += cost
 
-            # 存入快取
+            tokens = getattr(getattr(response, 'usage', None), 'total_tokens', 0)
+            self.usage_stats['total_tokens'] += tokens
+            cost = self._estimate_cost(tokens, model_name)
+            self.usage_stats['estimated_cost'] += cost
+            self._log_usage(model_name, tokens, cost, source)
+
             if use_cache:
                 self._set_cache(cache_key, result)
 
+            if self.current_key:
+                self.api_key_manager.report_success(self.current_key)
+
+            log_event("llm_call_success", {
+                "model": model_name,
+                "tokens": tokens,
+                "cost": cost,
+            })
             return result
 
-        except Exception as e:
-            error_msg = str(e)
-            lowered = error_msg.lower()
-
-            if "rate_limit" in lowered:
-                return "⚠️ API 調用次數已達上限，請稍後再試。"
-            if "api key" in lowered or "authentication" in lowered:
-                return "❌ API 金鑰無效或未授權，請檢查 OPENAI_API_KEY 設定。"
-            if "insufficient_quota" in lowered:
-                return "⚠️ API 配額不足，請檢查您的 OpenAI 帳戶。"
-            if "connection" in lowered or "timeout" in lowered:
-                return "⚠️ 無法連線至 OpenAI，請確認網路或稍後再試。"
-            return f"❌ AI 分析失敗：{error_msg}"
+        except Exception as error:  # pylint: disable=broad-except
+            log_exception(error, "llm_generate_insights")
+            if self.current_key:
+                self.api_key_manager.report_failure(self.current_key)
+                self._rotate_key()
+            return self._handle_failure(error)
 
     def generate_structured_output(
         self,
         prompt: str,
         schema: Dict[str, Any],
         model: Optional[str] = None,
-        use_cache: bool = True
+        use_cache: bool = True,
+        source: str = "structured"
     ) -> Dict[str, Any]:
-        """
-        生成結構化 JSON 輸出
-
-        Args:
-            prompt: 提示詞
-            schema: JSON Schema
-            model: 模型名稱
-            use_cache: 是否使用快取
-
-        Returns:
-            結構化的 JSON 物件
-        """
-        if not self.is_available():
-            return {"error": "AI 功能目前無法使用"}
-
-        # 在提示詞中要求 JSON 格式
-        json_prompt = f"""
-{prompt}
-
-請以 JSON 格式回傳，遵循以下結構：
-{json.dumps(schema, ensure_ascii=False, indent=2)}
-
-只回傳 JSON，不要有其他文字。
-"""
-
+        raw = self.generate_insights(
+            prompt=f"請依照以下 JSON Schema 返回結果：\n{json.dumps(schema, ensure_ascii=False, indent=2)}\n\n{prompt}",
+            model=model,
+            use_cache=use_cache,
+            source=source,
+        )
         try:
-            response = self.generate_insights(
-                json_prompt,
-                model=model,
-                temperature=0.5,  # 降低溫度以提高結構化輸出的可靠性
-                use_cache=use_cache
-            )
-
-            # 嘗試解析 JSON
-            # 移除可能的 markdown 標記
-            response = response.strip()
-            if response.startswith("```json"):
-                response = response[7:]
-            if response.startswith("```"):
-                response = response[3:]
-            if response.endswith("```"):
-                response = response[:-3]
-            response = response.strip()
-
-            return json.loads(response)
-
+            return json.loads(raw)
         except json.JSONDecodeError:
-            return {
-                "error": "無法解析 AI 回應為 JSON 格式",
-                "raw_response": response
-            }
-        except Exception as e:
-            return {
-                "error": f"生成結構化輸出失敗：{str(e)}"
-            }
-
-    def clear_cache(self):
-        """清除所有快取"""
-        self.cache = {}
-
-    def get_usage_stats(self) -> Dict[str, Any]:
-        """
-        獲取使用統計
-
-        Returns:
-            包含使用統計的字典
-        """
-        cache_hit_rate = 0
-        if self.usage_stats['total_calls'] > 0:
-            cache_hit_rate = (self.usage_stats['cache_hits'] /
-                            (self.usage_stats['total_calls'] + self.usage_stats['cache_hits'])) * 100
-
-        return {
-            **self.usage_stats,
-            'cache_hit_rate': f"{cache_hit_rate:.1f}%",
-            'cache_size': len(self.cache)
-        }
-
-    def reset_usage_stats(self):
-        """重置使用統計"""
-        self.usage_stats = {
-            'total_calls': 0,
-            'cache_hits': 0,
-            'total_tokens': 0,
-            'estimated_cost': 0.0
-        }
+            return {"error": "AI 回傳的格式無法解析", "raw": raw}
 
 
-# 全域 LLM 服務實例
-_llm_service = None
-
-def get_llm_service() -> LLMService:
-    """取得全域 LLM 服務實例"""
-    global _llm_service
-    if _llm_service is None:
-        _llm_service = LLMService()
-    return _llm_service
+__all__ = ["LLMService"]

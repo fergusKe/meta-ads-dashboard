@@ -32,8 +32,9 @@ OPENAI_API_KEY=your-key-here
 # 指定要呼叫的 OpenAI 模型
 OPENAI_MODEL=gpt-5-nano
 
-# LLM 回應快取秒數（降低成本與延遲）
-CACHE_TTL=3600
+# Agent 快取設定（效能優化，節省成本 40-60%）
+ENABLE_AGENT_CACHE=false  # 開發階段建議 false，正式環境建議 true
+AGENT_CACHE_TTL=3600      # 快取過期時間（秒），預設 1 小時
 ```
 
 功能開關（可依部署需求隱藏對應頁面）：

@@ -15,12 +15,20 @@
 """
 
 import os
+import streamlit as st
 
 from pydantic_ai import Agent, RunContext
 from pydantic import BaseModel, Field
 from dataclasses import dataclass
 from typing import Optional
 import pandas as pd
+
+from utils.cache_manager import cache_agent_result
+from utils.error_handler import handle_agent_errors
+from utils.model_selector import ModelSelector
+from utils.history_manager import record_history
+from utils.validators import validate_inputs
+from utils.security import sanitize_payload
 
 # ============================================
 # 結構化輸出定義（完全型別安全）
@@ -121,10 +129,10 @@ class ImagePromptAgent:
 
     def __init__(self):
         """初始化 Agent"""
-        # 從 .env 讀取模型名稱
-        model_name = os.getenv('OPENAI_MODEL', 'gpt-5-nano')
+        selector = ModelSelector()
+        preference = st.session_state.get('user_preferences', {}).get('image_prompt_complexity')
+        model_name = selector.choose(complexity=preference or os.getenv('IMAGE_PROMPT_COMPLEXITY', 'balanced'))
 
-        # 創建 Agent
         self.agent = Agent(
             f'openai:{model_name}',
             output_type=ImageGenerationResult,
@@ -350,6 +358,8 @@ class ImagePromptAgent:
 
             return style_templates.get(style, style_templates['現代簡約'])
 
+    @cache_agent_result()
+    @handle_agent_errors(context='生成圖片提示')
     async def generate_prompts(
         self,
         df: pd.DataFrame,
@@ -375,7 +385,12 @@ class ImagePromptAgent:
         Returns:
             ImageGenerationResult: 型別安全的提示詞生成結果
         """
-        # 準備依賴
+        # 輸入驗證
+        warnings = validate_inputs({'target_audience': target_audience, 'objective': image_type})
+        if warnings:
+            for message in warnings:
+                st.warning(f'輸入提醒: {message}')
+
         deps = ImagePromptDeps(
             df=df,
             image_type=image_type,
@@ -421,7 +436,18 @@ class ImagePromptAgent:
 
         # 執行 Agent
         result = await self.agent.run(user_prompt, deps=deps)
-        return result.output
+        output = result.output
+        record_history(
+            'ImagePromptAgent',
+            inputs=sanitize_payload({
+                'audience': target_audience or '',
+                'image_type': image_type,
+
+            }),
+            output=output.model_dump() if hasattr(output, 'model_dump') else str(output),
+            metadata={'warnings': warnings},
+        )
+        return output
 
     def generate_prompts_sync(
         self,

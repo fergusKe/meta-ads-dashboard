@@ -20,6 +20,13 @@ from dataclasses import dataclass
 from typing import Optional
 import pandas as pd
 import os
+import streamlit as st
+from utils.cache_manager import cache_agent_result
+from utils.error_handler import handle_agent_errors
+from utils.model_selector import ModelSelector
+from utils.history_manager import record_history
+from utils.validators import validate_inputs
+from utils.security import sanitize_payload
 
 # ============================================
 # 結構化輸出定義（完全型別安全）
@@ -82,10 +89,10 @@ class CopywritingAgent:
 
     def __init__(self):
         """初始化 Agent"""
-        # 從 .env 讀取模型名稱
-        model_name = os.getenv('OPENAI_MODEL', 'gpt-5-nano')
+        selector = ModelSelector()
+        preference = st.session_state.get('user_preferences', {}).get('copywriting_complexity')
+        model_name = selector.choose(complexity=preference or os.getenv('COPYWRITING_COMPLEXITY', 'balanced'))
 
-        # 創建 Agent
         self.agent = Agent(
             f'openai:{model_name}',
             output_type=CopywritingResult,
@@ -283,6 +290,8 @@ Meta 廣告政策注意事項：
 
         return common_keywords if common_keywords else ['品質', '健康']
 
+    @cache_agent_result()
+    @handle_agent_errors(context='生成文案')
     async def generate_copy(
         self,
         df: pd.DataFrame,
@@ -304,7 +313,14 @@ Meta 廣告政策注意事項：
         Returns:
             CopywritingResult: 型別安全的文案生成結果
         """
-        # 準備依賴
+        warnings = validate_inputs({
+            'target_audience': target_audience,
+            'objective': campaign_objective,
+        })
+        if warnings:
+            for message in warnings:
+                st.warning(f'輸入提醒: {message}')
+
         deps = CopywritingDeps(
             df=df,
             target_audience=target_audience,
@@ -346,7 +362,18 @@ Meta 廣告政策注意事項：
 
         # 執行 Agent
         result = await self.agent.run(user_prompt, deps=deps)
-        return result.output
+        output = result.output
+        record_history(
+            'CopywritingAgent',
+            inputs=sanitize_payload({
+                'target_audience': target_audience or '',
+                'campaign_objective': campaign_objective or '',
+                'special_requirements': special_requirements or '',
+            }),
+            output=output.model_dump() if hasattr(output, 'model_dump') else str(output),
+            metadata={'warnings': warnings},
+        )
+        return output
 
     def generate_copy_sync(
         self,
