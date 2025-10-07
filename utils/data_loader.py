@@ -26,7 +26,11 @@ def _load_and_preprocess_data(resolved_path: str) -> pd.DataFrame:
     return preprocess_data(df)
 
 
-def load_meta_ads_data(file_path: str | None = None, show_sidebar_info: bool = True) -> pd.DataFrame | None:
+def load_meta_ads_data(
+    file_path: str | None = None,
+    show_sidebar_info: bool = True,
+    sync_creative_store: bool = False,
+) -> pd.DataFrame | None:
     """載入並預處理 Meta 廣告數據，供各頁面共用
 
     Args:
@@ -51,6 +55,14 @@ def load_meta_ads_data(file_path: str | None = None, show_sidebar_info: bool = T
         st.sidebar.success(f"✅ 數據載入成功：{len(df)} 筆記錄")
         display_path = resolved_path.resolve().as_posix() if resolved_path.exists() else resolved_path.as_posix()
         st.sidebar.caption(f"📂 數據來源：{display_path}")
+
+    if sync_creative_store:
+        try:
+            from utils import creative_store
+
+            creative_store.sync_from_meta_ads(df)
+        except Exception as exc:
+            st.warning(f"⚠️ 素材成效資料同步失敗：{exc}")
 
     return df
 
