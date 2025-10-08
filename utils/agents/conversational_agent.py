@@ -15,6 +15,8 @@
 - 結構化輸出
 """
 
+import os
+
 from pydantic_ai import Agent, RunContext
 from pydantic import BaseModel, Field
 from dataclasses import dataclass

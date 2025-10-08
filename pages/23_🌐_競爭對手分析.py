@@ -1,6 +1,6 @@
 import os
 from datetime import datetime
-from typing import List, Dict
+from typing import List, Dict, Optional
 
 import pandas as pd
 import requests

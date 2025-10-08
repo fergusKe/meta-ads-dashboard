@@ -22,7 +22,19 @@ with col2:
 with col3:
     st.metric("快取 TTL (秒)", cache_stats['ttl_seconds'])
 
-usage_path = Path(st.secrets.get("LLM_USAGE_FILE", "data/history/llm_usage.csv"))
+def _resolve_usage_path() -> Path:
+    default_path = Path("data/history/llm_usage.csv")
+    try:
+        secrets_obj = st.secrets  # may raise if secrets.toml 不存在
+        candidate = secrets_obj.get("LLM_USAGE_FILE", None)
+        if candidate:
+            return Path(candidate)
+    except Exception:
+        pass
+    return default_path
+
+
+usage_path = _resolve_usage_path()
 if not usage_path.exists():
     usage_path = Path("data/history/llm_usage.csv")
 

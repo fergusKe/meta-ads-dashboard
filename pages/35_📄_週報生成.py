@@ -16,7 +16,8 @@ st.caption("匯總投放數據，生成可直接寄給客戶的 PPT 報告。")
 
 @st.cache_data(ttl=60)
 def _load_data():
-    return load_meta_ads_data(show_sidebar_info=False) or None
+    df = load_meta_ads_data(show_sidebar_info=False)
+    return df
 
 
 def render_qa_report(report: dict) -> None:
@@ -70,7 +71,7 @@ def render_qa_report(report: dict) -> None:
 
 def main() -> None:
     df = _load_data()
-    if df is None:
+    if df is None or df.empty:
         st.error("無法載入投放資料，請確認資料檔案是否存在。")
         return
 

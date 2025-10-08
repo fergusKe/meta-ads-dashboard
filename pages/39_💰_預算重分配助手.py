@@ -17,12 +17,15 @@ st.caption("依據行銷活動 ROAS 與花費，建議資源挪移方向。")
 
 @st.cache_data(ttl=60)
 def _load_data():
-    return load_meta_ads_data(show_sidebar_info=False) or pd.DataFrame()
+    df = load_meta_ads_data(show_sidebar_info=False)
+    if df is None:
+        return pd.DataFrame()
+    return df
 
 
 def main() -> None:
     df = _load_data()
-    if df is None or df.empty:
+    if df.empty:
         st.error("無法載入投放資料，請稍後再試。")
         return
 

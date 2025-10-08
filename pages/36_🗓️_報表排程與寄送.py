@@ -21,7 +21,7 @@ SCHEDULE_PATH = Path("data/reports/schedules.json")
 
 @st.cache_data(ttl=60)
 def load_data():
-    return load_meta_ads_data(show_sidebar_info=False) or None
+    return load_meta_ads_data(show_sidebar_info=False)
 
 
 def load_schedule() -> list[dict]:
@@ -276,7 +276,7 @@ def section_schedule(df: pd.DataFrame) -> None:
 
 def main() -> None:
     df = load_data()
-    if df is None:
+    if df is None or df.empty:
         st.error("無法載入投放資料")
         return
 

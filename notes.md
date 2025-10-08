@@ -1,4 +1,9 @@
+參考使用流程
 meta-ads-dashboard/廣告投手高效工作流程.md
+meta-ads-dashboard/docs/商業導向開發手冊.md
+
+cd meta-ads-dashboard
+uv run streamlit run app.py
 
 我要找我應該投哪些受眾要看哪個頁面
 
