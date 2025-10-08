@@ -20,10 +20,19 @@
 import os
 import time
 import traceback
-from functools import wraps
-from typing import Optional, Callable, Any
 from datetime import datetime
+from functools import wraps
+from typing import Any, Callable, Optional
+
 import streamlit as st
+
+
+class _NullContext:
+    def __enter__(self):
+        return None
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        return False
 
 
 class AgentError(Exception):
@@ -96,6 +105,20 @@ class AgentErrorHandler:
     }
 
     @staticmethod
+    def _ui_call(method: str, *args, **kwargs):
+        fn = getattr(st, method, None)
+        if callable(fn):
+            return fn(*args, **kwargs)
+        return None
+
+    @staticmethod
+    def _expander(*args, **kwargs):
+        expander = getattr(st, "expander", None)
+        if callable(expander):
+            return expander(*args, **kwargs)
+        return _NullContext()
+
+    @staticmethod
     def get_error_type(error: Exception) -> str:
         """
         判斷錯誤類型
@@ -107,6 +130,16 @@ class AgentErrorHandler:
             錯誤類型字串
         """
         error_class = error.__class__.__name__
+
+        keyword_map = {
+            'RateLimit': 'RateLimitError',
+            'Timeout': 'APITimeoutError',
+            'Connection': 'APIConnectionError',
+            'Auth': 'AuthenticationError',
+        }
+        for keyword, mapped in keyword_map.items():
+            if keyword in error_class:
+                return mapped
 
         # 處理 OpenAI 錯誤
         if 'openai' in str(type(error).__module__):
@@ -144,16 +177,16 @@ class AgentErrorHandler:
         if context:
             error_title = f"{error_title}（{context}）"
 
-        st.error(f"**{error_title}**\n\n{error_info['message']}")
+        AgentErrorHandler._ui_call("error", f"**{error_title}**\n\n{error_info['message']}")
 
         # 顯示詳細資訊（可摺疊）
         if show_details:
-            with st.expander("🔍 詳細錯誤資訊", expanded=False):
-                st.code(f"錯誤類型: {error_type}\n錯誤訊息: {str(error)}")
+            with AgentErrorHandler._expander("🔍 詳細錯誤資訊", expanded=False):
+                AgentErrorHandler._ui_call("code", f"錯誤類型: {error_type}\n錯誤訊息: {str(error)}")
 
                 # 顯示完整 traceback
-                with st.expander("📋 完整堆疊追蹤", expanded=False):
-                    st.code(traceback.format_exc())
+                with AgentErrorHandler._expander("📋 完整堆疊追蹤", expanded=False):
+                    AgentErrorHandler._ui_call("code", traceback.format_exc())
 
     @staticmethod
     def should_retry(error: Exception) -> bool:
@@ -239,7 +272,7 @@ def handle_agent_errors(
                         # 顯示重試訊息
                         if show_progress:
                             retry_msg = f"⏳ 重試中... (第 {attempt}/{max_retries} 次，{wait_time:.1f} 秒後重試)"
-                            st.warning(retry_msg)
+                            AgentErrorHandler._ui_call("warning", retry_msg)
 
                         # 等待
                         time.sleep(wait_time)
@@ -288,7 +321,7 @@ def handle_agent_errors(
                         )
 
                         if show_progress:
-                            st.warning(f"⏳ 重試中... (第 {attempt}/{max_retries} 次，{wait_time:.1f} 秒後重試)")
+                            AgentErrorHandler._ui_call("warning", f"⏳ 重試中... (第 {attempt}/{max_retries} 次，{wait_time:.1f} 秒後重試)")
 
                         time.sleep(wait_time)
                         continue

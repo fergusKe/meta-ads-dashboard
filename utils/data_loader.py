@@ -19,7 +19,32 @@ def _resolve_data_path(file_path: str | None) -> Path:
     return Path(candidate).expanduser()
 
 
-@st.cache_data(show_spinner=False)
+def _noop_cache(*args, **kwargs):
+    def decorator(func):
+        return func
+
+    return decorator
+
+
+cache_data = getattr(st, "cache_data", None) or _noop_cache
+
+
+def _ui_call(method: str, *args, **kwargs):
+    fn = getattr(st, method, None)
+    if callable(fn):
+        return fn(*args, **kwargs)
+    return None
+
+
+def _sidebar_call(method: str, *args, **kwargs):
+    sidebar = getattr(st, "sidebar", None)
+    fn = getattr(sidebar, method, None) if sidebar else None
+    if callable(fn):
+        return fn(*args, **kwargs)
+    return None
+
+
+@cache_data(show_spinner=False)
 def _load_and_preprocess_data(resolved_path: str) -> pd.DataFrame:
     """載入 Excel 並套用預處理（供 Streamlit 快取使用）"""
     df = pd.read_excel(resolved_path)
@@ -45,16 +70,16 @@ def load_meta_ads_data(
     try:
         df = _load_and_preprocess_data(str(resolved_path))
     except FileNotFoundError:
-        st.error(f"❌ 找不到檔案：{resolved_path}")
+        _ui_call("error", f"❌ 找不到檔案：{resolved_path}")
         return None
     except Exception as exc:
-        st.error(f"❌ 數據載入失敗：{exc}")
+        _ui_call("error", f"❌ 數據載入失敗：{exc}")
         return None
 
     if show_sidebar_info:
-        st.sidebar.success(f"✅ 數據載入成功：{len(df)} 筆記錄")
+        _sidebar_call("success", f"✅ 數據載入成功：{len(df)} 筆記錄")
         display_path = resolved_path.resolve().as_posix() if resolved_path.exists() else resolved_path.as_posix()
-        st.sidebar.caption(f"📂 數據來源：{display_path}")
+        _sidebar_call("caption", f"📂 數據來源：{display_path}")
 
     if sync_creative_store:
         try:
@@ -62,7 +87,7 @@ def load_meta_ads_data(
 
             creative_store.sync_from_meta_ads(df)
         except Exception as exc:
-            st.warning(f"⚠️ 素材成效資料同步失敗：{exc}")
+            _ui_call("warning", f"⚠️ 素材成效資料同步失敗：{exc}")
 
     return df
 
@@ -300,7 +325,7 @@ def filter_data_by_date_range(df, start_date, end_date):
         df_with_dates = df.dropna(subset=[date_column])
 
         if df_with_dates.empty:
-            st.warning("⚠️ 所有記錄的廣告開始日期都為空")
+            _ui_call("warning", "⚠️ 所有記錄的廣告開始日期都為空")
             return pd.DataFrame()
 
         # 使用廣告投放日期進行篩選
@@ -308,9 +333,15 @@ def filter_data_by_date_range(df, start_date, end_date):
         filtered_df = df_with_dates[mask]
 
         if filtered_df.empty:
-            st.warning(f"⚠️ 在 {start_date.strftime('%Y-%m-%d')} 至 {end_date.strftime('%Y-%m-%d')} 期間沒有廣告投放數據")
+            _ui_call(
+                "warning",
+                f"⚠️ 在 {start_date.strftime('%Y-%m-%d')} 至 {end_date.strftime('%Y-%m-%d')} 期間沒有廣告投放數據",
+            )
         else:
-            st.info(f"📅 已篩選廣告投放期間 {start_date.strftime('%Y-%m-%d')} 至 {end_date.strftime('%Y-%m-%d')} 的數據，共 {len(filtered_df)} 筆記錄")
+            _ui_call(
+                "info",
+                f"📅 已篩選廣告投放期間 {start_date.strftime('%Y-%m-%d')} 至 {end_date.strftime('%Y-%m-%d')} 的數據，共 {len(filtered_df)} 筆記錄",
+            )
 
         return filtered_df
 
@@ -320,7 +351,7 @@ def filter_data_by_date_range(df, start_date, end_date):
         df_with_dates = df.dropna(subset=['分析報告開始'])
 
         if df_with_dates.empty:
-            st.warning("⚠️ 所有記錄的分析報告日期都為空")
+            _ui_call("warning", "⚠️ 所有記錄的分析報告日期都為空")
             return pd.DataFrame()
 
         # 檢查篩選範圍是否與分析報告期間重疊
@@ -330,15 +361,21 @@ def filter_data_by_date_range(df, start_date, end_date):
         # 如果選擇的範圍與報告期間有重疊，返回所有數據
         if start_date <= report_end and end_date >= report_start:
             filtered_df = df_with_dates
-            st.info(f"📅 分析報告期間 ({report_start} 至 {report_end}) 與選擇範圍重疊，顯示所有 {len(filtered_df)} 筆記錄")
+            _ui_call(
+                "info",
+                f"📅 分析報告期間 ({report_start} 至 {report_end}) 與選擇範圍重疊，顯示所有 {len(filtered_df)} 筆記錄",
+            )
         else:
             filtered_df = pd.DataFrame()
-            st.warning(f"⚠️ 選擇的時間範圍與分析報告期間 ({report_start} 至 {report_end}) 不重疊")
+            _ui_call(
+                "warning",
+                f"⚠️ 選擇的時間範圍與分析報告期間 ({report_start} 至 {report_end}) 不重疊",
+            )
 
         return filtered_df
 
     else:
-        st.warning("⚠️ 數據中缺少日期欄位，無法進行日期篩選")
+        _ui_call("warning", "⚠️ 數據中缺少日期欄位，無法進行日期篩選")
         return df
 
 def export_data_to_csv(df, filename_prefix="meta_ads_export"):

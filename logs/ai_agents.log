@@ -1,0 +1,170 @@
+2025-10-08 14:02:41 | INFO | meta_ads | {"event": "api_key_acquired", "key_suffix": "key1"}
+2025-10-08 14:02:41 | INFO | meta_ads | {"event": "api_key_acquired", "key_suffix": "key2"}
+2025-10-08 14:02:41 | INFO | meta_ads | {"event": "api_key_failure", "key_suffix": "key1", "fails": 1}
+2025-10-08 14:02:41 | INFO | meta_ads | {"event": "api_key_failure", "key_suffix": "key1", "fails": 2}
+2025-10-08 14:02:41 | INFO | meta_ads | {"event": "api_key_failure", "key_suffix": "key1", "fails": 3}
+2025-10-08 14:02:41 | INFO | meta_ads | {"event": "api_key_disabled", "key_suffix": "key1"}
+2025-10-08 14:02:41 | INFO | meta_ads | {"event": "api_key_acquired", "key_suffix": "key2"}
+2025-10-08 14:02:41 | INFO | meta_ads | {"event": "api_key_acquired", "key_suffix": "one"}
+2025-10-08 14:02:41 | INFO | meta_ads | {"event": "api_key_failure", "key_suffix": "one", "fails": 1}
+2025-10-08 14:02:41 | INFO | meta_ads | {"event": "api_key_acquired", "key_suffix": "one"}
+2025-10-08 14:03:39 | INFO | meta_ads | {"event": "api_key_acquired", "key_suffix": "key1"}
+2025-10-08 14:03:39 | INFO | meta_ads | {"event": "api_key_acquired", "key_suffix": "key2"}
+2025-10-08 14:03:39 | INFO | meta_ads | {"event": "api_key_failure", "key_suffix": "key1", "fails": 1}
+2025-10-08 14:03:39 | INFO | meta_ads | {"event": "api_key_failure", "key_suffix": "key1", "fails": 2}
+2025-10-08 14:03:39 | INFO | meta_ads | {"event": "api_key_failure", "key_suffix": "key1", "fails": 3}
+2025-10-08 14:03:39 | INFO | meta_ads | {"event": "api_key_disabled", "key_suffix": "key1"}
+2025-10-08 14:03:39 | INFO | meta_ads | {"event": "api_key_acquired", "key_suffix": "key2"}
+2025-10-08 14:03:39 | INFO | meta_ads | {"event": "api_key_acquired", "key_suffix": "one"}
+2025-10-08 14:03:39 | INFO | meta_ads | {"event": "api_key_failure", "key_suffix": "one", "fails": 1}
+2025-10-08 14:03:39 | INFO | meta_ads | {"event": "api_key_acquired", "key_suffix": "one"}
+2025-10-08 14:04:16 | INFO | meta_ads | {"event": "api_key_acquired", "key_suffix": "key1"}
+2025-10-08 14:04:16 | INFO | meta_ads | {"event": "api_key_acquired", "key_suffix": "key2"}
+2025-10-08 14:04:16 | INFO | meta_ads | {"event": "api_key_failure", "key_suffix": "key1", "fails": 1}
+2025-10-08 14:04:16 | INFO | meta_ads | {"event": "api_key_failure", "key_suffix": "key1", "fails": 2}
+2025-10-08 14:04:16 | INFO | meta_ads | {"event": "api_key_failure", "key_suffix": "key1", "fails": 3}
+2025-10-08 14:04:16 | INFO | meta_ads | {"event": "api_key_disabled", "key_suffix": "key1"}
+2025-10-08 14:04:16 | INFO | meta_ads | {"event": "api_key_acquired", "key_suffix": "key2"}
+2025-10-08 14:04:16 | INFO | meta_ads | {"event": "api_key_acquired", "key_suffix": "one"}
+2025-10-08 14:04:16 | INFO | meta_ads | {"event": "api_key_failure", "key_suffix": "one", "fails": 1}
+2025-10-08 14:04:16 | INFO | meta_ads | {"event": "api_key_acquired", "key_suffix": "one"}
+2025-10-08 14:17:50 | INFO | meta_ads | {"event": "api_key_acquired", "key_suffix": "key1"}
+2025-10-08 14:17:50 | INFO | meta_ads | {"event": "api_key_acquired", "key_suffix": "key2"}
+2025-10-08 14:17:50 | INFO | meta_ads | {"event": "api_key_failure", "key_suffix": "key1", "fails": 1}
+2025-10-08 14:17:50 | INFO | meta_ads | {"event": "api_key_failure", "key_suffix": "key1", "fails": 2}
+2025-10-08 14:17:50 | INFO | meta_ads | {"event": "api_key_failure", "key_suffix": "key1", "fails": 3}
+2025-10-08 14:17:50 | INFO | meta_ads | {"event": "api_key_disabled", "key_suffix": "key1"}
+2025-10-08 14:17:50 | INFO | meta_ads | {"event": "api_key_acquired", "key_suffix": "key2"}
+2025-10-08 14:17:50 | INFO | meta_ads | {"event": "api_key_acquired", "key_suffix": "one"}
+2025-10-08 14:17:50 | INFO | meta_ads | {"event": "api_key_failure", "key_suffix": "one", "fails": 1}
+2025-10-08 14:17:50 | INFO | meta_ads | {"event": "api_key_acquired", "key_suffix": "one"}
+2025-10-08 14:27:23 | INFO | meta_ads | {"event": "api_key_acquired", "key_suffix": "key1"}
+2025-10-08 14:27:23 | INFO | meta_ads | {"event": "api_key_acquired", "key_suffix": "key2"}
+2025-10-08 14:27:23 | INFO | meta_ads | {"event": "api_key_failure", "key_suffix": "key1", "fails": 1}
+2025-10-08 14:27:23 | INFO | meta_ads | {"event": "api_key_failure", "key_suffix": "key1", "fails": 2}
+2025-10-08 14:27:23 | INFO | meta_ads | {"event": "api_key_failure", "key_suffix": "key1", "fails": 3}
+2025-10-08 14:27:23 | INFO | meta_ads | {"event": "api_key_disabled", "key_suffix": "key1"}
+2025-10-08 14:27:23 | INFO | meta_ads | {"event": "api_key_acquired", "key_suffix": "key2"}
+2025-10-08 14:27:23 | INFO | meta_ads | {"event": "api_key_acquired", "key_suffix": "one"}
+2025-10-08 14:27:23 | INFO | meta_ads | {"event": "api_key_failure", "key_suffix": "one", "fails": 1}
+2025-10-08 14:27:23 | INFO | meta_ads | {"event": "api_key_acquired", "key_suffix": "one"}
+2025-10-08 14:30:30 | INFO | meta_ads | {"event": "api_key_acquired", "key_suffix": "key1"}
+2025-10-08 14:30:30 | INFO | meta_ads | {"event": "api_key_acquired", "key_suffix": "key2"}
+2025-10-08 14:30:30 | INFO | meta_ads | {"event": "api_key_failure", "key_suffix": "key1", "fails": 1}
+2025-10-08 14:30:30 | INFO | meta_ads | {"event": "api_key_failure", "key_suffix": "key1", "fails": 2}
+2025-10-08 14:30:30 | INFO | meta_ads | {"event": "api_key_failure", "key_suffix": "key1", "fails": 3}
+2025-10-08 14:30:30 | INFO | meta_ads | {"event": "api_key_disabled", "key_suffix": "key1"}
+2025-10-08 14:30:30 | INFO | meta_ads | {"event": "api_key_acquired", "key_suffix": "key2"}
+2025-10-08 14:30:30 | INFO | meta_ads | {"event": "api_key_acquired", "key_suffix": "one"}
+2025-10-08 14:30:30 | INFO | meta_ads | {"event": "api_key_failure", "key_suffix": "one", "fails": 1}
+2025-10-08 14:30:30 | INFO | meta_ads | {"event": "api_key_acquired", "key_suffix": "one"}
+2025-10-08 14:30:57 | INFO | meta_ads | {"event": "api_key_acquired", "key_suffix": "key1"}
+2025-10-08 14:30:57 | INFO | meta_ads | {"event": "api_key_acquired", "key_suffix": "key2"}
+2025-10-08 14:30:57 | INFO | meta_ads | {"event": "api_key_failure", "key_suffix": "key1", "fails": 1}
+2025-10-08 14:30:57 | INFO | meta_ads | {"event": "api_key_failure", "key_suffix": "key1", "fails": 2}
+2025-10-08 14:30:57 | INFO | meta_ads | {"event": "api_key_failure", "key_suffix": "key1", "fails": 3}
+2025-10-08 14:30:57 | INFO | meta_ads | {"event": "api_key_disabled", "key_suffix": "key1"}
+2025-10-08 14:30:57 | INFO | meta_ads | {"event": "api_key_acquired", "key_suffix": "key2"}
+2025-10-08 14:30:57 | INFO | meta_ads | {"event": "api_key_acquired", "key_suffix": "one"}
+2025-10-08 14:30:57 | INFO | meta_ads | {"event": "api_key_failure", "key_suffix": "one", "fails": 1}
+2025-10-08 14:30:57 | INFO | meta_ads | {"event": "api_key_acquired", "key_suffix": "one"}
+2025-10-08 14:39:25 | INFO | meta_ads | {"event": "api_key_acquired", "key_suffix": "key1"}
+2025-10-08 14:39:25 | INFO | meta_ads | {"event": "api_key_acquired", "key_suffix": "key2"}
+2025-10-08 14:39:25 | INFO | meta_ads | {"event": "api_key_failure", "key_suffix": "key1", "fails": 1}
+2025-10-08 14:39:25 | INFO | meta_ads | {"event": "api_key_failure", "key_suffix": "key1", "fails": 2}
+2025-10-08 14:39:25 | INFO | meta_ads | {"event": "api_key_failure", "key_suffix": "key1", "fails": 3}
+2025-10-08 14:39:25 | INFO | meta_ads | {"event": "api_key_disabled", "key_suffix": "key1"}
+2025-10-08 14:39:25 | INFO | meta_ads | {"event": "api_key_acquired", "key_suffix": "key2"}
+2025-10-08 14:39:25 | INFO | meta_ads | {"event": "api_key_acquired", "key_suffix": "one"}
+2025-10-08 14:39:25 | INFO | meta_ads | {"event": "api_key_failure", "key_suffix": "one", "fails": 1}
+2025-10-08 14:39:25 | INFO | meta_ads | {"event": "api_key_acquired", "key_suffix": "one"}
+2025-10-08 14:40:12 | INFO | meta_ads | {"event": "api_key_acquired", "key_suffix": "key1"}
+2025-10-08 14:40:12 | INFO | meta_ads | {"event": "api_key_acquired", "key_suffix": "key2"}
+2025-10-08 14:40:12 | INFO | meta_ads | {"event": "api_key_failure", "key_suffix": "key1", "fails": 1}
+2025-10-08 14:40:12 | INFO | meta_ads | {"event": "api_key_failure", "key_suffix": "key1", "fails": 2}
+2025-10-08 14:40:12 | INFO | meta_ads | {"event": "api_key_failure", "key_suffix": "key1", "fails": 3}
+2025-10-08 14:40:12 | INFO | meta_ads | {"event": "api_key_disabled", "key_suffix": "key1"}
+2025-10-08 14:40:12 | INFO | meta_ads | {"event": "api_key_acquired", "key_suffix": "key2"}
+2025-10-08 14:40:12 | INFO | meta_ads | {"event": "api_key_acquired", "key_suffix": "one"}
+2025-10-08 14:40:12 | INFO | meta_ads | {"event": "api_key_failure", "key_suffix": "one", "fails": 1}
+2025-10-08 14:40:12 | INFO | meta_ads | {"event": "api_key_acquired", "key_suffix": "one"}
+2025-10-08 15:01:26 | INFO | meta_ads | {"event": "api_key_acquired", "key_suffix": "key1"}
+2025-10-08 15:01:26 | INFO | meta_ads | {"event": "api_key_acquired", "key_suffix": "key2"}
+2025-10-08 15:01:26 | INFO | meta_ads | {"event": "api_key_failure", "key_suffix": "key1", "fails": 1}
+2025-10-08 15:01:26 | INFO | meta_ads | {"event": "api_key_failure", "key_suffix": "key1", "fails": 2}
+2025-10-08 15:01:26 | INFO | meta_ads | {"event": "api_key_failure", "key_suffix": "key1", "fails": 3}
+2025-10-08 15:01:26 | INFO | meta_ads | {"event": "api_key_disabled", "key_suffix": "key1"}
+2025-10-08 15:01:26 | INFO | meta_ads | {"event": "api_key_acquired", "key_suffix": "key2"}
+2025-10-08 15:01:26 | INFO | meta_ads | {"event": "api_key_acquired", "key_suffix": "one"}
+2025-10-08 15:01:26 | INFO | meta_ads | {"event": "api_key_failure", "key_suffix": "one", "fails": 1}
+2025-10-08 15:01:26 | INFO | meta_ads | {"event": "api_key_acquired", "key_suffix": "one"}
+2025-10-08 15:01:52 | INFO | meta_ads | {"event": "api_key_acquired", "key_suffix": "key1"}
+2025-10-08 15:01:52 | INFO | meta_ads | {"event": "api_key_acquired", "key_suffix": "key2"}
+2025-10-08 15:01:52 | INFO | meta_ads | {"event": "api_key_failure", "key_suffix": "key1", "fails": 1}
+2025-10-08 15:01:52 | INFO | meta_ads | {"event": "api_key_failure", "key_suffix": "key1", "fails": 2}
+2025-10-08 15:01:52 | INFO | meta_ads | {"event": "api_key_failure", "key_suffix": "key1", "fails": 3}
+2025-10-08 15:01:52 | INFO | meta_ads | {"event": "api_key_disabled", "key_suffix": "key1"}
+2025-10-08 15:01:52 | INFO | meta_ads | {"event": "api_key_acquired", "key_suffix": "key2"}
+2025-10-08 15:01:52 | INFO | meta_ads | {"event": "api_key_acquired", "key_suffix": "one"}
+2025-10-08 15:01:52 | INFO | meta_ads | {"event": "api_key_failure", "key_suffix": "one", "fails": 1}
+2025-10-08 15:01:52 | INFO | meta_ads | {"event": "api_key_acquired", "key_suffix": "one"}
+2025-10-08 15:10:09 | INFO | meta_ads | {"event": "api_key_acquired", "key_suffix": "key1"}
+2025-10-08 15:10:09 | INFO | meta_ads | {"event": "api_key_acquired", "key_suffix": "key2"}
+2025-10-08 15:10:09 | INFO | meta_ads | {"event": "api_key_failure", "key_suffix": "key1", "fails": 1}
+2025-10-08 15:10:09 | INFO | meta_ads | {"event": "api_key_failure", "key_suffix": "key1", "fails": 2}
+2025-10-08 15:10:09 | INFO | meta_ads | {"event": "api_key_failure", "key_suffix": "key1", "fails": 3}
+2025-10-08 15:10:09 | INFO | meta_ads | {"event": "api_key_disabled", "key_suffix": "key1"}
+2025-10-08 15:10:09 | INFO | meta_ads | {"event": "api_key_acquired", "key_suffix": "key2"}
+2025-10-08 15:10:09 | INFO | meta_ads | {"event": "api_key_acquired", "key_suffix": "one"}
+2025-10-08 15:10:09 | INFO | meta_ads | {"event": "api_key_failure", "key_suffix": "one", "fails": 1}
+2025-10-08 15:10:09 | INFO | meta_ads | {"event": "api_key_acquired", "key_suffix": "one"}
+2025-10-08 15:17:04 | INFO | meta_ads | {"event": "api_key_acquired", "key_suffix": "key1"}
+2025-10-08 15:17:04 | INFO | meta_ads | {"event": "api_key_acquired", "key_suffix": "key2"}
+2025-10-08 15:17:04 | INFO | meta_ads | {"event": "api_key_failure", "key_suffix": "key1", "fails": 1}
+2025-10-08 15:17:04 | INFO | meta_ads | {"event": "api_key_failure", "key_suffix": "key1", "fails": 2}
+2025-10-08 15:17:04 | INFO | meta_ads | {"event": "api_key_failure", "key_suffix": "key1", "fails": 3}
+2025-10-08 15:17:04 | INFO | meta_ads | {"event": "api_key_disabled", "key_suffix": "key1"}
+2025-10-08 15:17:04 | INFO | meta_ads | {"event": "api_key_acquired", "key_suffix": "key2"}
+2025-10-08 15:17:04 | INFO | meta_ads | {"event": "api_key_acquired", "key_suffix": "one"}
+2025-10-08 15:17:04 | INFO | meta_ads | {"event": "api_key_failure", "key_suffix": "one", "fails": 1}
+2025-10-08 15:17:04 | INFO | meta_ads | {"event": "api_key_acquired", "key_suffix": "one"}
+2025-10-08 17:00:58 | INFO | meta_ads | {"event": "api_key_acquired", "key_suffix": "key1"}
+2025-10-08 17:00:58 | INFO | meta_ads | {"event": "api_key_acquired", "key_suffix": "key2"}
+2025-10-08 17:00:58 | INFO | meta_ads | {"event": "api_key_failure", "key_suffix": "key1", "fails": 1}
+2025-10-08 17:00:58 | INFO | meta_ads | {"event": "api_key_failure", "key_suffix": "key1", "fails": 2}
+2025-10-08 17:00:58 | INFO | meta_ads | {"event": "api_key_failure", "key_suffix": "key1", "fails": 3}
+2025-10-08 17:00:58 | INFO | meta_ads | {"event": "api_key_disabled", "key_suffix": "key1"}
+2025-10-08 17:00:58 | INFO | meta_ads | {"event": "api_key_acquired", "key_suffix": "key2"}
+2025-10-08 17:00:58 | INFO | meta_ads | {"event": "api_key_acquired", "key_suffix": "one"}
+2025-10-08 17:00:58 | INFO | meta_ads | {"event": "api_key_failure", "key_suffix": "one", "fails": 1}
+2025-10-08 17:00:58 | INFO | meta_ads | {"event": "api_key_acquired", "key_suffix": "one"}
+2025-10-08 17:01:39 | INFO | meta_ads | {"event": "api_key_acquired", "key_suffix": "key1"}
+2025-10-08 17:01:39 | INFO | meta_ads | {"event": "api_key_acquired", "key_suffix": "key2"}
+2025-10-08 17:01:39 | INFO | meta_ads | {"event": "api_key_failure", "key_suffix": "key1", "fails": 1}
+2025-10-08 17:01:39 | INFO | meta_ads | {"event": "api_key_failure", "key_suffix": "key1", "fails": 2}
+2025-10-08 17:01:39 | INFO | meta_ads | {"event": "api_key_failure", "key_suffix": "key1", "fails": 3}
+2025-10-08 17:01:39 | INFO | meta_ads | {"event": "api_key_disabled", "key_suffix": "key1"}
+2025-10-08 17:01:39 | INFO | meta_ads | {"event": "api_key_acquired", "key_suffix": "key2"}
+2025-10-08 17:01:39 | INFO | meta_ads | {"event": "api_key_acquired", "key_suffix": "one"}
+2025-10-08 17:01:39 | INFO | meta_ads | {"event": "api_key_failure", "key_suffix": "one", "fails": 1}
+2025-10-08 17:01:39 | INFO | meta_ads | {"event": "api_key_acquired", "key_suffix": "one"}
+2025-10-08 17:02:09 | INFO | meta_ads | {"event": "api_key_acquired", "key_suffix": "key1"}
+2025-10-08 17:02:09 | INFO | meta_ads | {"event": "api_key_acquired", "key_suffix": "key2"}
+2025-10-08 17:02:09 | INFO | meta_ads | {"event": "api_key_failure", "key_suffix": "key1", "fails": 1}
+2025-10-08 17:02:09 | INFO | meta_ads | {"event": "api_key_failure", "key_suffix": "key1", "fails": 2}
+2025-10-08 17:02:09 | INFO | meta_ads | {"event": "api_key_failure", "key_suffix": "key1", "fails": 3}
+2025-10-08 17:02:09 | INFO | meta_ads | {"event": "api_key_disabled", "key_suffix": "key1"}
+2025-10-08 17:02:09 | INFO | meta_ads | {"event": "api_key_acquired", "key_suffix": "key2"}
+2025-10-08 17:02:09 | INFO | meta_ads | {"event": "api_key_acquired", "key_suffix": "one"}
+2025-10-08 17:02:09 | INFO | meta_ads | {"event": "api_key_failure", "key_suffix": "one", "fails": 1}
+2025-10-08 17:02:09 | INFO | meta_ads | {"event": "api_key_acquired", "key_suffix": "one"}
+2025-10-08 17:15:16 | INFO | meta_ads | {"event": "api_key_acquired", "key_suffix": "key1"}
+2025-10-08 17:15:16 | INFO | meta_ads | {"event": "api_key_acquired", "key_suffix": "key2"}
+2025-10-08 17:15:16 | INFO | meta_ads | {"event": "api_key_failure", "key_suffix": "key1", "fails": 1}
+2025-10-08 17:15:16 | INFO | meta_ads | {"event": "api_key_failure", "key_suffix": "key1", "fails": 2}
+2025-10-08 17:15:16 | INFO | meta_ads | {"event": "api_key_failure", "key_suffix": "key1", "fails": 3}
+2025-10-08 17:15:16 | INFO | meta_ads | {"event": "api_key_disabled", "key_suffix": "key1"}
+2025-10-08 17:15:16 | INFO | meta_ads | {"event": "api_key_acquired", "key_suffix": "key2"}
+2025-10-08 17:15:16 | INFO | meta_ads | {"event": "api_key_acquired", "key_suffix": "one"}
+2025-10-08 17:15:16 | INFO | meta_ads | {"event": "api_key_failure", "key_suffix": "one", "fails": 1}
+2025-10-08 17:15:16 | INFO | meta_ads | {"event": "api_key_acquired", "key_suffix": "one"}

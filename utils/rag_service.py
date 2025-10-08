@@ -206,6 +206,36 @@ CTR：{ctr:.2f}%
             print(f"❌ 知識庫載入失敗：{str(e)}")
             return False
 
+    def add_documents(self, documents: List[Document], collection_name: str = "ad_creatives") -> None:
+        """
+        向指定知識庫追加文件。若未載入則嘗試載入，無則建立。
+        """
+        if not documents:
+            return
+
+        if not self.initialize_embeddings():
+            raise ValueError("Embeddings 未初始化，請檢查 API Key")
+
+        if self.vectorstore is None:
+            try:
+                self.vectorstore = Chroma(
+                    collection_name=collection_name,
+                    embedding_function=self.embeddings,
+                    persist_directory=self.persist_directory
+                )
+            except Exception:
+                # 若 collection 不存在則建立新的
+                self.vectorstore = Chroma.from_documents(
+                    documents=documents,
+                    embedding=self.embeddings,
+                    collection_name=collection_name,
+                    persist_directory=self.persist_directory
+                )
+                return
+
+        self.vectorstore.add_documents(documents)
+        self.vectorstore.persist()
+
     def search_similar_ads(self, query: str, k: int = 5, filter_criteria: Optional[Dict] = None) -> List[Document]:
         """
         搜尋相似廣告
