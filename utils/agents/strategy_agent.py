@@ -7,25 +7,53 @@ from dataclasses import dataclass
 from typing import Any, Optional
 
 import pandas as pd
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, validator
 from pydantic_ai import Agent, RunContext
+
+from utils.model_selector import ModelSelector
 
 
 class StrategicPillar(BaseModel):
-    name: str = Field(description="策略主軸")
-    objective: str = Field(description="目標")
-    key_results: list[str] = Field(description="關鍵成果指標")
-    tactical_moves: list[str] = Field(description="戰術建議")
+    name: str = Field(description="策略主軸", min_length=3, max_length=120)
+    objective: str = Field(description="目標", min_length=5, max_length=500)
+    key_results: list[str] = Field(description="關鍵成果指標", min_length=1, max_length=6)
+    tactical_moves: list[str] = Field(description="戰術建議", min_length=1, max_length=8)
 
 
 class StrategyAgentResult(BaseModel):
     horizon: str = Field(description="規劃期間")
-    strategic_pillars: list[StrategicPillar] = Field(description="策略主軸清單")
-    budget_allocation: dict[str, float] = Field(description="預算分配建議")
-    audience_strategy: list[str] = Field(description="受眾策略")
-    creative_strategy: list[str] = Field(description="創意策略")
-    measurement_plan: list[str] = Field(description="衡量計畫")
-    executive_summary: str = Field(description="主管摘要")
+    strategic_pillars: list[StrategicPillar] = Field(
+        description="策略主軸清單",
+        min_length=1,
+        max_length=4
+    )
+    budget_allocation: dict[str, float | str] = Field(description="預算分配建議（允許百分比或金額文字）")
+    audience_strategy: list[str] = Field(description="受眾策略", min_length=1, max_length=8)
+    creative_strategy: list[str] = Field(description="創意策略", min_length=1, max_length=8)
+    measurement_plan: list[str] = Field(description="衡量計畫", min_length=1, max_length=8)
+    executive_summary: str = Field(description="主管摘要", min_length=10, max_length=300)
+
+    @staticmethod
+    def _normalize_allocation_value(value: float | str) -> float | str:
+        """允許模型輸出百分比/文字，但儘量轉成數值。"""
+        if isinstance(value, (int, float)):
+            return float(value)
+        cleaned = value.strip()
+        if cleaned.endswith('%'):
+            try:
+                return float(cleaned.rstrip('%'))
+            except ValueError:
+                return cleaned
+        try:
+            return float(cleaned.replace(',', ''))
+        except ValueError:
+            return cleaned
+
+    @validator('budget_allocation', pre=True)
+    def _validate_budget_allocation(cls, allocation: dict[str, float | str]) -> dict[str, float | str]:
+        if not allocation:
+            return {}
+        return {str(k): cls._normalize_allocation_value(v) for k, v in allocation.items()}
 
 
 @dataclass
@@ -45,7 +73,10 @@ class StrategyAgent:
     """智能投放策略 Agent."""
 
     def __init__(self) -> None:
-        model_name = os.getenv("OPENAI_MODEL", "gpt-5-nano")
+        selector = ModelSelector()
+        preference = os.getenv('STRATEGY_COMPLEXITY', 'balanced')
+        model_name = selector.choose(complexity=preference)
+        self.model_name = model_name
         self.agent = Agent(
             f"openai:{model_name}",
             output_type=StrategyAgentResult,

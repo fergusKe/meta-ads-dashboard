@@ -95,7 +95,7 @@ def section_create_license() -> None:
                 }
             )
             st.success(f"授權方案 {license_id} 已建立。")
-            st.experimental_rerun()
+            st.rerun()
 
 
 def section_apply_license(df: pd.DataFrame) -> None:
@@ -160,7 +160,7 @@ def section_delete_license(df: pd.DataFrame) -> None:
     if st.button("刪除選定方案", key="delete_license_btn"):
         brand_license_store.delete_license(license_id)
         st.success("授權方案已刪除。")
-        st.experimental_rerun()
+        st.rerun()
 
 
 def section_notifications() -> None:
@@ -204,7 +204,7 @@ def section_pilot_tracker() -> None:
                     recorded_by=recorded_by,
                 )
                 st.success("試點紀錄已儲存。")
-                st.experimental_rerun()
+                st.rerun()
 
     summary = license_pilot_tracker.summarize_pilots()
     if summary.empty:

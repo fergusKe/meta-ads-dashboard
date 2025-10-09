@@ -3,6 +3,7 @@ import pandas as pd
 from datetime import datetime
 from utils.data_loader import load_meta_ads_data
 from utils.agents.daily_check_agent import DailyCheckAgent
+from utils.ui_feedback import queue_completion_message, render_completion_message
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 
@@ -239,8 +240,7 @@ def main():
                     # 儲存結果
                     st.session_state['agent_result'] = result
                     st.session_state['agent_run_time'] = datetime.now()
-
-                    st.success("✅ Agent 巡檢完成！")
+                    queue_completion_message("daily_check_agent", "✅ Agent 巡檢完成！")
                     # 不使用 st.rerun()，直接在下方顯示結果
 
                 except Exception as e:
@@ -250,6 +250,7 @@ def main():
     # 顯示結果
     if 'agent_result' in st.session_state:
         st.markdown("---")
+        render_completion_message("daily_check_agent")
 
         result = st.session_state['agent_result']
         run_time = st.session_state.get('agent_run_time', datetime.now())

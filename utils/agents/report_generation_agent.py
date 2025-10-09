@@ -15,7 +15,8 @@
 from __future__ import annotations
 
 import os
-from dataclasses import dataclass
+from datetime import datetime
+from pydantic.dataclasses import dataclass
 from typing import Optional
 
 import pandas as pd
@@ -67,13 +68,13 @@ class ReportGenerationResult(BaseModel):
     strategies: list[StrategyRecommendation]
 
 
-@dataclass
+@dataclass(config=dict(arbitrary_types_allowed=True))
 class ReportGenerationDeps:
     df: pd.DataFrame
-    current_start: pd.Timestamp
-    current_end: pd.Timestamp
-    previous_start: Optional[pd.Timestamp]
-    previous_end: Optional[pd.Timestamp]
+    current_start: datetime
+    current_end: datetime
+    previous_start: Optional[datetime]
+    previous_end: Optional[datetime]
     rag_service: Optional[object] = None
 
 

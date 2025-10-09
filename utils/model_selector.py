@@ -18,8 +18,9 @@ class ModelProfile:
 
 
 DEFAULT_PROFILES: Dict[str, ModelProfile] = {
+    # 使用已確認可用的模型，避免不可存取的 instruct 變體導致 404。
     "fast": ModelProfile("gpt-5-nano", latency_ms=1200, cost_ratio=1.0, max_tokens=4096),
-    "balanced": ModelProfile("gpt-5-nano-instruct", latency_ms=1800, cost_ratio=1.2, max_tokens=8192),
+    "balanced": ModelProfile("gpt-5-nano", latency_ms=1500, cost_ratio=1.1, max_tokens=8192),
     "quality": ModelProfile("gpt-4.1-mini", latency_ms=3200, cost_ratio=4.0, max_tokens=8192),
 }
 

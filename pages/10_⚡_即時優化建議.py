@@ -1,4 +1,5 @@
 import os
+import hashlib
 import streamlit as st
 import pandas as pd
 from datetime import datetime, timedelta
@@ -6,6 +7,9 @@ from datetime import datetime, timedelta
 from utils.data_loader import load_meta_ads_data
 from utils.rag_service import RAGService
 from utils.agents import OptimizationAgent, OptimizationResult
+from utils.ui_feedback import queue_completion_message, render_completion_message
+
+RUN_BUTTON_KEY = "optimization_run_btn_" + hashlib.md5(__file__.encode("utf-8")).hexdigest()
 
 
 st.set_page_config(page_title="⚡ 即時優化建議", page_icon="⚡", layout="wide")
@@ -236,7 +240,13 @@ def main() -> None:
         help="載入歷史高效案例，協助 Agent 生成更貼近品牌的建議"
     )
 
-    run_agent = st.button("🚀 啟動 OptimizationAgent", type="primary", use_container_width=True)
+    run_agent = st.button(
+        "🚀 啟動 OptimizationAgent",
+        key=f"{RUN_BUTTON_KEY}_{st.session_state.get('optimization_button_nonce', 0)}",
+        type="primary",
+        use_container_width=True,
+    )
+    st.session_state['optimization_button_nonce'] = st.session_state.get('optimization_button_nonce', 0) + 1
 
     if run_agent:
         optimization_agent = get_optimization_agent()
@@ -294,6 +304,7 @@ def main() -> None:
                 st.session_state['optimization_result'] = result
                 st.session_state['optimization_generated_at'] = datetime.now()
                 st.session_state['optimization_rag_status'] = rag_status_message
+                queue_completion_message("optimization_agent", "✅ 即時優化建議分析完成")
             except Exception as exc:
                 status.update(label="❌ Step 3: 生成失敗", state="error")
                 st.error(f"❌ 生成優化建議時發生錯誤：{exc}")
@@ -306,6 +317,7 @@ def main() -> None:
     if optimization_result:
         generated_at = st.session_state.get('optimization_generated_at')
         rag_status_message = st.session_state.get('optimization_rag_status')
+        render_completion_message("optimization_agent")
 
         st.markdown("---")
         st.subheader("🤖 AI 優化總覽")

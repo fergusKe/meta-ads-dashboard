@@ -8,6 +8,7 @@ import streamlit as st
 from utils.data_loader import load_meta_ads_data
 from utils.rag_service import RAGService
 from utils.agents import QualityScoreAgent, QualityAnalysisResult
+from utils.ui_feedback import queue_completion_message, render_completion_message
 
 st.set_page_config(page_title="📈 廣告品質評分", page_icon="📈", layout="wide")
 
@@ -194,6 +195,7 @@ def main() -> None:
                 st.session_state['quality_result'] = result
                 st.session_state['quality_generated_at'] = datetime.now()
                 st.session_state['quality_rag_status'] = rag_status_message
+                queue_completion_message("quality_score_agent", "✅ AI 品質診斷完成")
             except Exception as exc:
                 status.update(label="❌ Step 3: 生成失敗", state="error")
                 st.error(f"❌ 生成品質分析時發生錯誤：{exc}")
@@ -205,6 +207,7 @@ def main() -> None:
     if result:
         st.markdown("---")
         st.subheader("🤖 AI 品質總結")
+        render_completion_message("quality_score_agent")
 
         generated_at = st.session_state.get('quality_generated_at')
         rag_status_message = st.session_state.get('quality_rag_status')

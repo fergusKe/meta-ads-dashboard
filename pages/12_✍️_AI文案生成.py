@@ -5,6 +5,7 @@ from datetime import datetime
 from utils.data_loader import load_meta_ads_data
 from utils.rag_service import RAGService
 from utils.agents import CopywritingAgent
+from utils.ui_feedback import queue_completion_message, render_completion_message
 
 st.set_page_config(page_title="AI 文案生成", page_icon="✍️", layout="wide")
 
@@ -93,9 +94,9 @@ def main():
 
             # Step 1: 初始化
             with st.status("📋 Step 1: 初始化 CopywritingAgent", expanded=True) as status:
-                model_name = os.getenv('OPENAI_MODEL', 'gpt-5-nano')
+                model_name = getattr(copywriting_agent, "model_name", os.getenv('OPENAI_MODEL', 'gpt-5-nano'))
                 st.write("✓ Agent 類型：**CopywritingAgent**")
-                st.write(f"✓ 模型：**{model_name}**（從 .env 讀取）")
+                st.write(f"✓ 模型：**{model_name}**（智能模型選擇器自動配置）")
                 st.write("✓ 輸出類型：**CopywritingResult**（型別安全）")
                 status.update(label="✅ Step 1: Agent 初始化完成", state="complete")
 
@@ -158,7 +159,8 @@ def main():
                         st.write("• 1 個合規性檢查結果")
                         final_status.update(label="✅ Step 5: 所有輸出已驗證", state="complete")
 
-                    st.success("🎉 **文案生成完成！**（使用 Pydantic AI Agent）")
+                    queue_completion_message("copywriting_agent", "🎉 **文案生成完成！**（使用 Pydantic AI Agent）")
+                    render_completion_message("copywriting_agent")
 
                 except Exception as e:
                     st.error(f"❌ 文案生成失敗：{str(e)}")

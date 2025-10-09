@@ -17,7 +17,7 @@
 import os
 
 from pydantic_ai import Agent, RunContext
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 from dataclasses import dataclass
 from typing import Optional
 import pandas as pd
@@ -77,14 +77,26 @@ class CreativeOptimizationResult(BaseModel):
         max_length=5
     )
     performance_prediction: dict[str, str] = Field(
-        description="表現預測（預期哪些優化效果最好）"
+        description="表現預測（預期哪些優化效果最好）",
+        default_factory=dict
     )
     resource_requirements: dict[str, str] = Field(
-        description="資源需求（時間、人力、預算）"
+        description="資源需求（時間、人力、預算）",
+        default_factory=dict
     )
     risk_assessment: dict[str, str] = Field(
-        description="風險評估（可能的風險和應對方案）"
+        description="風險評估（可能的風險和應對方案）",
+        default_factory=dict
     )
+
+    @field_validator("performance_prediction", "resource_requirements", "risk_assessment", mode="before")
+    @classmethod
+    def _ensure_dict(cls, value: object) -> dict[str, str]:
+        if value is None or value == "":
+            return {}
+        if isinstance(value, dict):
+            return value
+        return {"summary": str(value)}
 
 # ============================================
 # Agent 依賴注入

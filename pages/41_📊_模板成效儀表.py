@@ -67,8 +67,14 @@ def _render_performance(meta: pd.DataFrame, metrics: pd.DataFrame) -> None:
         st.info("尚無使用統計，待模板上線後再回來查看。")
         return
     merged = meta.merge(metrics, how="left", on="template_id").fillna(0)
-    merged["download"] = merged.get("download", 0).astype(int)
-    merged["view"] = merged.get("view", 0).astype(int)
+    if "download" in merged.columns:
+        merged["download"] = merged["download"].fillna(0).astype(int)
+    else:
+        merged["download"] = 0
+    if "view" in merged.columns:
+        merged["view"] = merged["view"].fillna(0).astype(int)
+    else:
+        merged["view"] = 0
     ranking = merged.sort_values("download", ascending=False).head(10)
     st.bar_chart(
         ranking.set_index("name")[["download", "view"]],
@@ -107,7 +113,7 @@ def _render_review_schedule(meta: pd.DataFrame) -> None:
                     metadata={"schedule": "template_dashboard"},
                 )
                 st.success("審核紀錄已更新。")
-                st.experimental_rerun()
+        st.rerun()
 
 
 def main() -> None:

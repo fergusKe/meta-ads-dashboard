@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import hashlib
+import inspect
 import streamlit as st
 from contextlib import contextmanager
 from typing import Iterator
@@ -32,9 +34,19 @@ def update_progress(step: int = 1, text: str | None = None) -> None:
         updater(step, text)
 
 
-def register_cancel_button(label: str = "停止執行") -> bool:
+def _auto_cancel_key(label: str) -> str:
+    caller = inspect.currentframe().f_back  # type: ignore[union-attr]
+    identifier = label
+    if caller:
+        identifier = f"{caller.f_code.co_filename}:{caller.f_lineno}:{label}"
+    digest = hashlib.md5(identifier.encode("utf-8")).hexdigest()
+    return f"_cancel_btn_{digest}"
+
+
+def register_cancel_button(label: str = "停止執行", key: str | None = None) -> bool:
     cancel_key = "_agent_cancelled"
-    if st.button(label, type="secondary"):
+    button_key = key or _auto_cancel_key(label)
+    if st.button(label, type="secondary", key=button_key):
         st.session_state[cancel_key] = True
     return st.session_state.get(cancel_key, False)
 

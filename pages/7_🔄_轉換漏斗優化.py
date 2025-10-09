@@ -9,6 +9,7 @@ import streamlit as st
 from utils.data_loader import load_meta_ads_data
 from utils.rag_service import RAGService
 from utils.agents import FunnelAnalysisAgent, FunnelAnalysisResult
+from utils.ui_feedback import queue_completion_message, render_completion_message
 
 st.set_page_config(page_title="🔄 轉換漏斗優化", page_icon="🔄", layout="wide")
 
@@ -270,6 +271,7 @@ def main() -> None:
                 st.session_state['funnel_analysis_result'] = result
                 st.session_state['funnel_analysis_generated_at'] = datetime.now()
                 st.session_state['funnel_analysis_rag_status'] = rag_status_message
+                queue_completion_message("funnel_analysis_agent", "✅ 漏斗分析完成")
             except Exception as exc:
                 status.update(label="❌ Step 3: 分析失敗", state="error")
                 st.error(f"❌ 產生漏斗分析時發生錯誤：{exc}")
@@ -282,6 +284,7 @@ def main() -> None:
     if analysis_result:
         st.markdown("---")
         st.subheader("🤖 AI 漏斗總結")
+        render_completion_message("funnel_analysis_agent")
 
         generated_at = st.session_state.get('funnel_analysis_generated_at')
         rag_status_message = st.session_state.get('funnel_analysis_rag_status')

@@ -146,7 +146,7 @@ def section_create_template() -> None:
                 }
             )
             st.success(f"模板 {name} 已建立（ID: {template_id}）。")
-            st.experimental_rerun()
+            st.rerun()
 
 
 def section_manage_templates(df: pd.DataFrame) -> None:
@@ -166,7 +166,7 @@ def section_manage_templates(df: pd.DataFrame) -> None:
         if st.button("版本 +1", key=f"version_{template_id}"):
             template_store.increment_version(template_id)
             st.success("版本已提升。")
-            st.experimental_rerun()
+            st.rerun()
     with col2:
         new_status = st.selectbox(
             "更新狀態",
@@ -180,12 +180,12 @@ def section_manage_templates(df: pd.DataFrame) -> None:
             checks = template_store.validate_template(template_id)
             template_store.mark_status(template_id, new_status, reviewer=reviewer, notes=notes, checks=checks)
             st.success("狀態與審核紀錄已更新。")
-            st.experimental_rerun()
+            st.rerun()
     with col3:
         if st.button("刪除模板", key=f"delete_{template_id}"):
             template_store.remove_template(template_id)
             st.success("模板已刪除。")
-            st.experimental_rerun()
+            st.rerun()
 
     st.markdown("#### ✔️ 樣板檢查")
     if st.button("執行檢查", key=f"validate_{template_id}"):

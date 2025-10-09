@@ -17,7 +17,7 @@
 from __future__ import annotations
 
 import os
-from dataclasses import dataclass
+from pydantic.dataclasses import dataclass
 from typing import Optional
 
 import pandas as pd
@@ -31,7 +31,7 @@ from utils.model_selector import ModelSelector
 from utils.history_manager import record_history
 from utils.validators import validate_inputs
 from utils.security import sanitize_payload
-from utils.progress import progress_tracker, update_progress, register_cancel_button, reset_cancel_flag
+from utils.progress import progress_tracker, update_progress, reset_cancel_flag
 
 # ============================================
 # 結構化輸出定義（完全型別安全）
@@ -98,7 +98,7 @@ class OptimizationResult(BaseModel):
 # ============================================
 
 
-@dataclass
+@dataclass(config=dict(arbitrary_types_allowed=True))
 class OptimizationDeps:
     """OptimizationAgent 所需依賴"""
 
@@ -317,7 +317,6 @@ class OptimizationAgent:
         """執行即時優化分析 (async)"""
 
         reset_cancel_flag()
-        register_cancel_button(label='停止優化分析')
 
         warnings = validate_inputs({'target_audience': None, 'objective': None})
         if warnings:

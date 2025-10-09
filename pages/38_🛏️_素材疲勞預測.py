@@ -188,7 +188,7 @@ def _render_detail(filtered: pd.DataFrame) -> None:
                         recorded_by=recorded_by,
                     )
                     st.success("已紀錄試點成果。")
-                    st.experimental_rerun()
+                    st.rerun()
 
     pilot_summary = fatigue_pilot_manager.summarize_results()
     if pilot_summary.empty:

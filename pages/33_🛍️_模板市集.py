@@ -82,7 +82,7 @@ def render_cards(df: pd.DataFrame, metrics: pd.DataFrame) -> None:
             detail_key = f"detail_{row['template_id']}"
             if st.button("查看詳情", key=detail_key):
                 st.session_state["selected_template_id"] = row["template_id"]
-                st.experimental_rerun()
+                st.rerun()
 
 
 def render_detail(template_id: str, df: pd.DataFrame) -> None:
@@ -166,7 +166,7 @@ def render_detail(template_id: str, df: pd.DataFrame) -> None:
                 },
             )
             st.success("感謝回饋，我們會持續優化模板品質。")
-            st.experimental_rerun()
+            st.rerun()
 
     feedback_df = template_metrics_store.load_feedback(template_id, limit=10)
     if feedback_df.empty:
@@ -185,7 +185,7 @@ def render_detail(template_id: str, df: pd.DataFrame) -> None:
     st.divider()
     if st.button("返回市集列表"):
         st.session_state.pop("selected_template_id", None)
-        st.experimental_rerun()
+        st.rerun()
 
 
 def main() -> None:

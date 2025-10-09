@@ -93,6 +93,9 @@ class CopywritingAgent:
         preference = st.session_state.get('user_preferences', {}).get('copywriting_complexity')
         model_name = selector.choose(complexity=preference or os.getenv('COPYWRITING_COMPLEXITY', 'balanced'))
 
+        # 供 UI 顯示使用的實際模型名稱
+        self.model_name = model_name
+
         self.agent = Agent(
             f'openai:{model_name}',
             output_type=CopywritingResult,

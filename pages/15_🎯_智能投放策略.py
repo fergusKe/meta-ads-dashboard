@@ -6,6 +6,7 @@ import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 from utils.agents import StrategyAgent, StrategyAgentResult
 from utils.data_loader import load_meta_ads_data
+from utils.ui_feedback import queue_completion_message, render_completion_message
 
 st.set_page_config(page_title="智能投放策略", page_icon="🎯", layout="wide")
 
@@ -656,7 +657,11 @@ def main():
     market_forecast = {'signals': notes_list} if notes_list else None
     inventory_constraints = {'items': inventory_notes} if inventory_notes else None
 
-    run_strategy_agent = st.button('🚀 啟動 StrategyAgent', type='primary')
+    run_strategy_agent = st.button(
+        '🚀 啟動 StrategyAgent',
+        key='run_strategy_agent_btn',
+        type='primary'
+    )
 
     if run_strategy_agent:
         agent = get_strategy_agent()
@@ -687,6 +692,7 @@ def main():
                 st.session_state['strategy_agent_result'] = result
                 st.session_state['strategy_agent_generated_at'] = pd.Timestamp.now()
                 st.success('✅ 已生成智能投放策略')
+                queue_completion_message("strategy_agent", "✅ 智能投放策略已準備完成")
             except Exception as exc:
                 st.error(f'❌ 策略生成失敗：{exc}')
                 import traceback
@@ -696,6 +702,7 @@ def main():
     strategy_result: StrategyAgentResult | None = st.session_state.get('strategy_agent_result')
     if strategy_result:
         generated_at = st.session_state.get('strategy_agent_generated_at')
+        render_completion_message("strategy_agent")
         if generated_at:
             st.caption(f"最後更新時間：{generated_at.strftime('%Y-%m-%d %H:%M:%S')}")
         render_strategy_result(strategy_result)
@@ -709,7 +716,11 @@ def main():
 
     with col1:
         st.subheader("📝 快速文案生成")
-        if st.button("🚀 基於最佳受眾生成文案", use_container_width=True):
+        if st.button(
+            "🚀 基於最佳受眾生成文案",
+            key="strategy_generate_copy_btn",
+            use_container_width=True
+        ):
             if audience_recommendations and 'full_combo_performance' in audience_recommendations:
                 full_combo_data = audience_recommendations['full_combo_performance']
                 if not full_combo_data.empty:
@@ -725,7 +736,11 @@ def main():
 
     with col2:
         st.subheader("🎨 智能圖片設計")
-        if st.button("🎨 基於最佳受眾生成圖片", use_container_width=True):
+        if st.button(
+            "🎨 基於最佳受眾生成圖片",
+            key="strategy_generate_image_btn",
+            use_container_width=True
+        ):
             if audience_recommendations and 'full_combo_performance' in audience_recommendations:
                 full_combo_data = audience_recommendations['full_combo_performance']
                 if not full_combo_data.empty:

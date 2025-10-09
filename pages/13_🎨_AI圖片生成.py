@@ -2,12 +2,14 @@ import streamlit as st
 import pandas as pd
 import os
 import json
+import hashlib
 from datetime import datetime
 import base64
 from io import BytesIO
 from PIL import Image
 from utils.data_loader import load_meta_ads_data
 from utils.agents import ImagePromptAgent, ImageGenerationResult
+from utils.ui_feedback import queue_completion_message, render_completion_message
 
 st.set_page_config(page_title="AI 圖片生成", page_icon="🎨", layout="wide")
 
@@ -345,6 +347,13 @@ def main():
     with col2:
         st.subheader("🚀 執行生成")
 
+        use_rag = st.checkbox(
+            "📚 參考歷史案例（RAG）",
+            value=st.session_state.get("image_generation_use_rag", True),
+            help="啟用後會引用高效素材案例作為提示詞靈感"
+        )
+        st.session_state["image_generation_use_rag"] = use_rag
+
         # 檢查是否需要自動生成（來自智能投放策略的推薦）
         auto_generate = (recommended_audience and
                         st.session_state.get('auto_generate_image', False))
@@ -377,9 +386,9 @@ def main():
 
             # Step 1: 初始化
             with st.status("📋 Step 1: 初始化 ImagePromptAgent", expanded=True) as status:
-                model_name = os.getenv('OPENAI_MODEL', 'gpt-5-nano')
+                model_name = getattr(image_agent, "model_name", os.getenv('OPENAI_MODEL', 'gpt-5-nano'))
                 st.write("✓ Agent 類型：**ImagePromptAgent**")
-                st.write(f"✓ 模型：**{model_name}**（從 .env 讀取）")
+                st.write(f"✓ 模型：**{model_name}**（智能模型選擇器自動配置）")
                 st.write("✓ 輸出類型：**ImageGenerationResult**（3個提示詞變體）")
                 status.update(label="✅ Step 1: Agent 初始化完成", state="complete")
 
@@ -425,20 +434,40 @@ def main():
                         ]
                     )
 
-                    result = asyncio.run(
-                        generate_image_prompts_with_agent(
-                            image_agent,
-                            agent_df,
-                            image_type,
-                            style_preference,
-                            recommended_audience or None,
-                            special_requirements or None,
-                            image_size,
+                    if '(' in image_size and ')' in image_size:
+                        dimension = image_size.split('(')[1].split(')')[0]
+                    else:
+                        dimension = "1024x1024"
+
+                    use_rag = st.session_state.get("image_generation_use_rag", False)
+
+                    signature_parts = [
+                        image_type,
+                        style_preference,
+                        recommended_audience or "",
+                        special_requirements or "",
+                        dimension,
+                        str(bool(use_rag)),
+                    ]
+                    prompt_signature = hashlib.md5("||".join(signature_parts).encode("utf-8")).hexdigest()
+                    cache_store = st.session_state.setdefault("image_prompt_cache", {})
+
+                    if prompt_signature in cache_store:
+                        st.info("✨ 使用快取提示詞（未重複呼叫 API）")
+                        result = cache_store[prompt_signature]
+                    else:
+                        result = image_agent.generate_prompts_sync(
+                            df=agent_df,
+                            image_type=image_type,
+                            style_preference=style_preference,
+                            target_audience=recommended_audience or None,
+                            special_requirements=special_requirements or None,
+                            image_size=dimension,
                         )
-                    )
-                    st.write("✓ 變體 1：完成")
-                    st.write("✓ 變體 2：完成")
-                    st.write("✓ 變體 3：完成")
+                        cache_store[prompt_signature] = result
+                    total_variants = len(result.prompts)
+                    for idx in range(total_variants):
+                        st.write(f"✓ 變體 {idx + 1}：完成")
                     st.write("✓ Pydantic 驗證：通過")
                     status.update(label="✅ Step 4: 提示詞生成完成", state="complete")
                 except Exception as e:
@@ -481,7 +510,8 @@ def main():
 
         # 顯示結果
         if image_data:
-            st.success(f"✅ 圖片生成完成！使用 {provider}")
+            queue_completion_message("image_generation_agent", f"✅ 圖片生成完成！使用 {provider}")
+            render_completion_message("image_generation_agent")
 
             # 儲存歷史
             save_generation_history(

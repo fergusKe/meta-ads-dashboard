@@ -10,6 +10,7 @@ from datetime import datetime
 from utils.data_loader import load_meta_ads_data
 from utils.rag_service import RAGService
 from utils.agents import CreativeOptimizationAgent, CreativeOptimizationResult
+from utils.ui_feedback import queue_completion_message, render_completion_message
 
 st.set_page_config(page_title="智能素材優化", page_icon="🧠", layout="wide")
 
@@ -555,6 +556,7 @@ def main():
 
                             st.session_state[result_key] = result
                             st.session_state[timestamp_key] = datetime.now()
+                            queue_completion_message("creative_optimization_agent", "✅ 智能素材優化計畫生成完成")
 
                         except Exception as exc:
                             st.error(f"❌ 優化計畫生成失敗：{exc}")
@@ -565,6 +567,7 @@ def main():
 
             if st.session_state.get(result_key):
                 st.divider()
+                render_completion_message("creative_optimization_agent")
                 last_run = st.session_state.get(timestamp_key)
                 if last_run:
                     st.caption(f"上次生成時間：{last_run.strftime('%Y-%m-%d %H:%M:%S')}")

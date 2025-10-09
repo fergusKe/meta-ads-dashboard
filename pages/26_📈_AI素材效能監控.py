@@ -6,6 +6,7 @@ import streamlit as st
 
 from utils import creative_store
 from utils.agents.creative_performance_agent import CreativePerformanceAgent
+from utils.ui_feedback import queue_completion_message, render_completion_message
 
 
 st.set_page_config(page_title="AI 素材效能監控", page_icon="📈", layout="wide")
@@ -83,7 +84,7 @@ def manual_entry() -> None:
                 }
                 creative_store.upsert_record(record)
                 st.success(f"素材 {creative_id} 已更新。")
-                st.experimental_rerun()
+                st.rerun()
 
 
 def run_analysis(df: pd.DataFrame) -> None:
@@ -116,6 +117,8 @@ def run_analysis(df: pd.DataFrame) -> None:
                 st.write("### ⚙️ 優化建議")
                 for idea in result.optimizations:
                     st.markdown(f"- {idea.priority} {idea.focus_area}：{'; '.join(idea.action_steps)} → {idea.expected_impact}")
+                queue_completion_message("creative_monitor_agent", "✅ 最新素材洞察已生成")
+                render_completion_message("creative_monitor_agent")
             except Exception as exc:
                 st.error(f"AI 分析失敗：{exc}")
 

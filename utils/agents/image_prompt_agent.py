@@ -18,7 +18,7 @@ import os
 import streamlit as st
 
 from pydantic_ai import Agent, RunContext
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 from dataclasses import dataclass
 from typing import Optional
 import pandas as pd
@@ -38,28 +38,28 @@ class ImagePrompt(BaseModel):
     """單個圖片提示詞"""
     main_prompt: str = Field(
         description="主要提示詞（英文，詳細描述圖片內容）",
-        min_length=50,
-        max_length=500
+        min_length=40,
+        max_length=800
     )
     chinese_description: str = Field(
         description="中文說明（幫助理解提示詞內容）",
-        min_length=20,
-        max_length=200
+        min_length=15,
+        max_length=300
     )
     style_keywords: list[str] = Field(
         description="風格關鍵字（如：modern, elegant, warm）",
-        min_length=3,
+        min_length=2,
         max_length=8
     )
     composition_tips: list[str] = Field(
         description="構圖建議（如：主體居中、三分法）",
-        min_length=2,
-        max_length=5
+        min_length=1,
+        max_length=6
     )
     color_palette: list[str] = Field(
         description="建議色彩（如：warm tones, green, brown）",
-        min_length=2,
-        max_length=5
+        min_length=1,
+        max_length=6
     )
     mood: str = Field(
         description="氛圍/情緒（如：relaxing, energetic, elegant）"
@@ -71,8 +71,8 @@ class ImagePrompt(BaseModel):
 class ImageGenerationResult(BaseModel):
     """圖片生成結果（完全型別安全）"""
     prompts: list[ImagePrompt] = Field(
-        description="3個提示詞變體（不同風格和角度）",
-        min_length=3,
+        description="最多 3 個提示詞變體（不同風格和角度）",
+        min_length=1,
         max_length=3
     )
     brand_alignment_score: int = Field(
@@ -90,17 +90,30 @@ class ImageGenerationResult(BaseModel):
     )
     optimization_tips: list[str] = Field(
         description="優化建議（如何進一步改善）",
-        min_length=3,
-        max_length=5
+        min_length=2,
+        max_length=6
     )
     recommended_variant: int = Field(
         ge=0,
         le=2,
         description="推薦使用的變體索引（0-2）"
     )
-    platform_guidelines: dict[str, list[str]] = Field(
-        description="平台規範提醒（Meta 廣告圖片要求）"
+    platform_guidelines: dict[str, list[str]] | None = Field(
+        description="平台規範提醒（Meta 廣告圖片要求）",
+        default=None
     )
+
+    @model_validator(mode="after")
+    def _ensure_platform_guidelines(cls, result: "ImageGenerationResult") -> "ImageGenerationResult":
+        if not result.platform_guidelines:
+            result.platform_guidelines = {
+                "Meta": [
+                    "主體清晰並突出產品",
+                    "文字佔比控制在 20% 以內",
+                    "避免關鍵元素貼近邊框"
+                ]
+            }
+        return result
 
 # ============================================
 # Agent 依賴注入
@@ -132,6 +145,8 @@ class ImagePromptAgent:
         selector = ModelSelector()
         preference = st.session_state.get('user_preferences', {}).get('image_prompt_complexity')
         model_name = selector.choose(complexity=preference or os.getenv('IMAGE_PROMPT_COMPLEXITY', 'balanced'))
+
+        self.model_name = model_name
 
         self.agent = Agent(
             f'openai:{model_name}',
@@ -437,6 +452,14 @@ class ImagePromptAgent:
         # 執行 Agent
         result = await self.agent.run(user_prompt, deps=deps)
         output = result.output
+        if not output.platform_guidelines:
+            output.platform_guidelines = {
+                "Meta": [
+                    "主體清晰，避免過多文字",
+                    "保持品牌元素可見",
+                    "符合 20% 文字佔比建議"
+                ]
+            }
         record_history(
             'ImagePromptAgent',
             inputs=sanitize_payload({

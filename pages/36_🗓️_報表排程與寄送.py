@@ -241,7 +241,7 @@ def section_schedule(df: pd.DataFrame) -> None:
         }
         add_schedule(schedule_entry)
         st.success("排程已建立。暫以 JSON 儲存，後續可串接寄信服務。")
-        st.experimental_rerun()
+        st.rerun()
 
     st.markdown("#### 已建立排程")
     entries = load_schedule()

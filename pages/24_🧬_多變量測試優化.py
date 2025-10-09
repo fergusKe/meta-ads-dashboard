@@ -7,6 +7,7 @@ import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 from utils.agents import MVTDesignAgent, MVTDesignResult
 from utils.data_loader import load_meta_ads_data
+from utils.ui_feedback import queue_completion_message, render_completion_message
 
 st.set_page_config(page_title="多變量測試優化", page_icon="🧬", layout="wide")
 
@@ -431,7 +432,8 @@ def main():
                         )
                         st.session_state['mvt_design_result'] = result
                         st.session_state['mvt_design_generated_at'] = pd.Timestamp.now()
-                        st.success('✅ 已生成完整的 MVT 測試計畫')
+                        queue_completion_message("mvt_design_agent", "✅ 已生成完整的 MVT 測試計畫")
+                        render_completion_message("mvt_design_agent")
                     except Exception as exc:
                         st.error(f'❌ 生成失敗：{exc}')
                         import traceback

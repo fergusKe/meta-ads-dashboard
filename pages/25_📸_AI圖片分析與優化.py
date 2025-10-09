@@ -6,6 +6,7 @@ from io import BytesIO
 from PIL import Image
 from utils.data_loader import load_meta_ads_data
 from utils.agents import ImageAnalysisAgent, ImageAnalysisResult
+from utils.ui_feedback import queue_completion_message, render_completion_message
 
 st.set_page_config(page_title="AI 圖片分析與優化", page_icon="📸", layout="wide")
 
@@ -283,7 +284,7 @@ def main():
                     # 儲存分析結果到 session state
                     st.session_state['image_analysis'] = analysis_result
                     st.session_state['analyzed_image_key'] = image_key
-                    st.success("✅ 分析完成！")
+                    queue_completion_message("image_analysis_agent", "✅ 圖片分析完成！")
                     st.rerun()
 
         # 顯示分析結果
@@ -296,6 +297,7 @@ def main():
             weaknesses = analysis_result.weaknesses
 
             st.divider()
+            render_completion_message("image_analysis_agent")
 
             # 總體評分
             st.subheader("📊 總體評分")

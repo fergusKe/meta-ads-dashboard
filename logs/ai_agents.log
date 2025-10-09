@@ -180,3 +180,23 @@
 2025-10-08 17:59:40 | INFO | meta_ads | {"event": "api_key_failure", "key_suffix": "one", "fails": 1}
 2025-10-08 17:59:40 | INFO | meta_ads | {"event": "api_key_acquired", "key_suffix": "one"}
 2025-10-08 18:11:31 | INFO | meta_ads | {"event": "dashboard_view", "page": "效能與成本儀表板"}
+2025-10-09 04:38:35 | INFO | meta_ads | {"event": "model_selected", "complexity": "balanced", "model": "gpt-5-nano-instruct", "prefer_quality": false}
+2025-10-09 04:43:51 | INFO | meta_ads | {"event": "model_selected", "complexity": "balanced", "model": "gpt-5-nano-instruct", "prefer_quality": false}
+2025-10-09 04:43:57 | INFO | meta_ads | {"event": "model_selected", "complexity": "balanced", "model": "gpt-5-nano-instruct", "prefer_quality": false}
+2025-10-09 04:46:37 | INFO | meta_ads | {"event": "model_selected", "complexity": "balanced", "model": "gpt-5-nano", "prefer_quality": false}
+2025-10-09 05:11:15 | INFO | meta_ads | {"event": "model_selected", "complexity": "balanced", "model": "gpt-5-nano", "prefer_quality": false}
+2025-10-09 05:11:17 | INFO | meta_ads | {"event": "model_selected", "complexity": "balanced", "model": "gpt-5-nano", "prefer_quality": false}
+2025-10-09 05:12:10 | INFO | meta_ads | {"event": "agent_history_recorded", "agent": "CopywritingAgent"}
+2025-10-09 05:25:40 | INFO | meta_ads | {"event": "dashboard_view", "page": "效能與成本儀表板"}
+2025-10-09 05:43:01 | INFO | meta_ads | {"event": "model_selected", "complexity": "balanced", "model": "gpt-5-nano", "prefer_quality": false}
+2025-10-09 05:43:04 | INFO | meta_ads | {"event": "model_selected", "complexity": "balanced", "model": "gpt-5-nano", "prefer_quality": false}
+2025-10-09 05:47:19 | INFO | meta_ads | {"event": "agent_history_recorded", "agent": "CopywritingAgent"}
+2025-10-09 05:55:42 | INFO | meta_ads | {"event": "model_selected", "complexity": "balanced", "model": "gpt-5-nano", "prefer_quality": false}
+2025-10-09 05:56:04 | INFO | meta_ads | {"event": "model_selected", "complexity": "balanced", "model": "gpt-5-nano", "prefer_quality": false}
+2025-10-09 05:56:07 | INFO | meta_ads | {"event": "model_selected", "complexity": "balanced", "model": "gpt-5-nano", "prefer_quality": false}
+2025-10-09 05:56:22 | INFO | meta_ads | {"event": "model_selected", "complexity": "balanced", "model": "gpt-5-nano", "prefer_quality": false}
+2025-10-09 05:56:45 | INFO | meta_ads | {"event": "agent_history_recorded", "agent": "OptimizationAgent"}
+2025-10-09 05:57:48 | INFO | meta_ads | {"event": "agent_history_recorded", "agent": "CopywritingAgent"}
+2025-10-09 06:34:19 | INFO | meta_ads | {"event": "model_selected", "complexity": "balanced", "model": "gpt-5-nano", "prefer_quality": false}
+2025-10-09 12:26:19 | INFO | meta_ads | {"event": "model_selected", "complexity": "balanced", "model": "gpt-5-nano", "prefer_quality": false}
+2025-10-09 12:29:09 | INFO | meta_ads | {"event": "agent_history_recorded", "agent": "ImagePromptAgent"}
